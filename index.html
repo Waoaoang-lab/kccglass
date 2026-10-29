@@ -173,7 +173,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 .vwbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; background: var(--surface); border-top: 1px solid var(--line); }
 .t3 .vwmsg { font-size: 12px; color: var(--muted); flex: 1 1 200px; min-width: 0; }
 .t3 .vwmsg.bad { color: #b45309; }
-.t3 #t3vwAuto[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.t3 #t3vwPick[aria-pressed="true"], .t3 #t3vwAuto[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .tabs button { padding: 7px 16px; }
 /* ---------- 3D 일조 비교 ---------- */
 .t3 @media (prefers-color-scheme: dark) {
@@ -420,6 +420,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
             <button id="t3vwB" aria-pressed="false">유리 B</button>
           </div>
           <button class="btn" id="t3vwAuto" aria-pressed="false">번갈아 보기</button>
+          <button class="btn" id="t3vwPick" aria-pressed="false">실사에서 자리 찍기</button>
+          <label class="chk"><input type="checkbox" id="t3vwHide" checked> 대지 기존 건물 숨기기</label>
           <span class="vwmsg" id="t3vwMsg">브이월드 실사를 여는 중…</span>
           <span class="spacer"></span>
           <button class="btn" id="t3vwClose">실사 닫기</button>
@@ -2806,8 +2808,17 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     if (!vwOpen || !vwReady) return;
     vwMsg('건물을 실사 화면으로 보내는 중…');
     Promise.all([exportGLB('A'), exportGLB('B')]).then(([a, b]) => {
-      vwFrame().postMessage({ type: 'place', A: a, B: b, lat: LAT, lng: LON, show: vwWhich }, '*', [a, b]);
+      vwFrame().postMessage({ type: 'place', A: a, B: b, lat: LAT, lng: LON, show: vwWhich, fp: footprintEN() }, '*', [a, b]);
     }).catch(e => vwMsg('건물을 보내지 못했습니다: ' + e.message, true));
+  }
+  // 대지 윤곽(현장 기준 동·북 m): 실제 건물은 데이터 윤곽, 나머지는 모델 외곽 사각형 + 2m 여유
+  function footprintEN() {
+    if (btype === 'real' && realTarget) return realTarget.pts.map(([x, z]) => [x, -z]);
+    const r = bld.rotation.y; bld.rotation.y = 0; bld.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(bld); bld.rotation.y = r; bld.updateMatrixWorld(true);
+    const c = Math.cos(r), sn = Math.sin(r), pad = 2;
+    return [[b.min.x - pad, b.min.z - pad], [b.max.x + pad, b.min.z - pad], [b.max.x + pad, b.max.z + pad], [b.min.x - pad, b.max.z + pad]]
+      .map(([x, z]) => { const X = x * c + z * sn, Z = -x * sn + z * c; return [X, -Z]; });
   }
   function vwModelSoon() { if (!vwOpen) return; clearTimeout(vwModelT); vwModelT = setTimeout(vwPushModel, 700); }
   function vwTimeSoon() {
@@ -2828,6 +2839,11 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     if (e.source !== $('vwFrame').contentWindow || !e.data) return;
     if (e.data.type === 'vw-ready') { vwReady = true; vwMsg('실사 화면 준비됨'); vwPushModel(); vwTimeSoon(); vwFly(); }
     else if (e.data.type === 'vw-status') vwMsg(e.data.text, e.data.bad);
+    else if (e.data.type === 'vw-pick') {
+      $('vwPick').setAttribute('aria-pressed', 'false');
+      const lat = e.data.lat, lng = e.data.lng, label = `실사에서 고른 위치 (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+      if (window.__siteFromOutside) window.__siteFromOutside(lat, lng, label); else window.glass3d.setSite(lat, lng, label);
+    }
   });
   $('vwOpen').hidden = !onSite;
   $('vwOpen').onclick = () => {
@@ -2837,6 +2853,12 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     else { vwPushModel(); vwTimeSoon(); vwFly(); }
   };
   $('vwClose').onclick = () => { vwOpen = false; $('vwPanel').hidden = true; clearInterval(vwAutoT); vwAutoT = 0; $('vwAuto').setAttribute('aria-pressed', 'false'); };
+  $('vwPick').onclick = () => {
+    const on = $('vwPick').getAttribute('aria-pressed') !== 'true';
+    $('vwPick').setAttribute('aria-pressed', on);
+    if (vwReady) vwFrame().postMessage({ type: 'pickmode', on }, '*');
+  };
+  $('vwHide').onchange = e => { if (vwReady) vwFrame().postMessage({ type: 'hide', on: e.target.checked }, '*'); };
   $('vwA').onclick = () => vwShow('A'); $('vwB').onclick = () => vwShow('B');
   $('vwAuto').onclick = () => {
     if (vwAutoT) { clearInterval(vwAutoT); vwAutoT = 0; $('vwAuto').setAttribute('aria-pressed', 'false'); return; }
@@ -2975,6 +2997,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     if (mapSv) mapSv.setCenter(LL());
     if (pano) pano.setPosition(LL());
   }
+  window.__siteFromOutside = setSite;
   $('siteBar').addEventListener('submit', e => {
     e.preventDefault();
     const q = $('siteQ').value.trim(); if (!q) return;

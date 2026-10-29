@@ -31,6 +31,7 @@
   );
   var map = new vw.Map('vmap', opts);
   var viewer = null, ents = {}, urls = {}, pending = [];
+  var fp = null, hideOn = true, hidden = [], hideT = 0, hideRuns = 0, pickMode = false;
 
   // 안쪽 3D 엔진의 클래스는 이미 있는 객체에서 꺼내 씀
   function C3() { return viewer.camera.position.constructor; }
@@ -63,8 +64,75 @@
         model: { uri: urls[k], heightReference: 1, shadows: 1 }
       });
     });
+    fp = d.fp || null;
+    restoreHidden();
     redraw();
-    say('건물을 세웠습니다. 유리 A·B 버튼으로 바꿔 보세요.');
+    say('건물을 세웠습니다. 대지 안 기존 건물을 찾는 중…');
+    hideSoon(400, 6);
+  }
+
+  /* ---------- 대지 안 기존 건물 숨기기 ----------
+     대지 윤곽 안쪽 여러 지점을 화면에 투영해서 그 아래 겹쳐 있는 실사 건물을 모두 찾아(drillPick) 숨김.
+     실사 건물은 카메라를 움직이면 다시 불러와지므로, 움직임이 멈출 때마다 다시 숨김 */
+  function isOurs(o) { return o && o.id && (o.id === ents.A || o.id === ents.B); }
+  function inPoly(x, y, P) {
+    var c = false;
+    for (var i = 0, j = P.length - 1; i < P.length; j = i++) {
+      var xi = P[i][0], yi = P[i][1], xj = P[j][0], yj = P[j][1];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  }
+  function samplePts() {
+    // 대지 윤곽을 85%로 줄인 안쪽에서 격자로 점을 뽑음 (이웃 건물을 건드리지 않도록)
+    var cx = 0, cy = 0; fp.forEach(function (p) { cx += p[0]; cy += p[1]; }); cx /= fp.length; cy /= fp.length;
+    var P = fp.map(function (p) { return [cx + (p[0] - cx) * 0.85, cy + (p[1] - cy) * 0.85]; });
+    var xs = P.map(function (p) { return p[0]; }), ys = P.map(function (p) { return p[1]; });
+    var x0 = Math.min.apply(0, xs), x1 = Math.max.apply(0, xs), y0 = Math.min.apply(0, ys), y1 = Math.max.apply(0, ys);
+    var out = [[cx, cy]], N = 7;
+    for (var i = 0; i <= N; i++) for (var j = 0; j <= N; j++) {
+      var x = x0 + (x1 - x0) * i / N, y = y0 + (y1 - y0) * j / N;
+      if (inPoly(x, y, P)) out.push([x, y]);
+    }
+    return out;
+  }
+  function hideOnce() {
+    if (!viewer || !fp || !hideOn) return 0;
+    var C = C3(), sc = viewer.scene, found = 0, types = {};
+    var heights = [2, 8, 20, 45];
+    samplePts().forEach(function (p) {
+      var lat = LAT + p[1] / 111320, lng = LNG + p[0] / (111320 * Math.cos(LAT * RAD));
+      heights.forEach(function (h) {
+        var w = sc.cartesianToCanvasCoordinates(C.fromDegrees(lng, lat, h));
+        if (!w || w.x < 0 || w.y < 0 || w.x > sc.canvas.clientWidth || w.y > sc.canvas.clientHeight) return;
+        var list = [];
+        try { list = sc.drillPick(w, 8) || []; } catch (e) { return; }
+        list.forEach(function (o) {
+          if (!o || isOurs(o)) return;
+          var target = null;
+          if (typeof o.getProperty === 'function' && 'show' in o) target = o;                 // 3D 타일 건물 하나
+          else if (o.primitive && !o.primitive.root && 'show' in o.primitive && o.primitive !== sc.globe) target = o.primitive; // 건물별 모델
+          types[(o.constructor && o.constructor.name) || typeof o] = 1;
+          if (target && target.show !== false) { target.show = false; hidden.push(target); found++; }
+        });
+      });
+    });
+    if (found) redraw();
+    return { found: found, types: Object.keys(types) };
+  }
+  function hideSoon(delay, runs) {
+    clearTimeout(hideT);
+    hideRuns = Math.max(hideRuns, runs || 3);
+    hideT = setTimeout(function step() {
+      var r = hideOnce();
+      if (r && hideOn) say(hidden.length ? '대지 안 기존 건물 ' + hidden.length + '개 부분을 숨겼습니다. 유리 A·B 버튼으로 바꿔 보세요.' :
+        '대지 안 기존 건물을 아직 찾지 못했습니다' + (r.types.length ? ' (찾은 대상: ' + r.types.join(', ') + ')' : '') + '. 건물이 화면에 보이게 카메라를 돌려 보세요.', !hidden.length);
+      if (--hideRuns > 0) hideT = setTimeout(step, 900);
+    }, delay);
+  }
+  function restoreHidden() {
+    hidden.forEach(function (t) { try { t.show = true; } catch (e) {} });
+    hidden = [];
   }
   function show(k) { ['A', 'B'].forEach(function (x) { if (ents[x]) ents[x].show = x === k; }); redraw(); }
   function setTime(ms) {
@@ -93,7 +161,9 @@
       if (d.type === 'place') place(d);
       else if (d.type === 'show') show(d.which);
       else if (d.type === 'time') setTime(d.ms);
-      else if (d.type === 'fly') fly(d);
+      else if (d.type === 'fly') { fly(d); hideSoon(2200, 4); }
+      else if (d.type === 'hide') { hideOn = d.on; if (hideOn) hideSoon(50, 4); else { restoreHidden(); redraw(); say('기존 건물을 다시 보이게 했습니다.'); } }
+      else if (d.type === 'pickmode') { pickMode = d.on; viewer.canvas.style.cursor = pickMode ? 'crosshair' : ''; if (pickMode) say('실사 화면에서 건물을 세울 자리를 누르세요.'); }
     } catch (e) { say('오류: ' + e.message, true); }
   }
   window.addEventListener('message', function (e) { if (e.source === parent) handle(e.data); });
@@ -103,6 +173,20 @@
   (function wait() {
     if (window.ws3d && ws3d.viewer && ws3d.viewer.entities && ws3d.viewer.camera) {
       viewer = ws3d.viewer;
+      try { viewer.camera.moveEnd.addEventListener(function () { if (fp && hideOn) hideSoon(300, 3); }); } catch (e) {}
+      setInterval(function () { if (fp && hideOn) hideOnce(); }, 3000);
+      var down = null;
+      viewer.canvas.addEventListener('pointerdown', function (e) { down = [e.clientX, e.clientY]; });
+      viewer.canvas.addEventListener('pointerup', function (e) {
+        if (!pickMode || !down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;
+        var r = viewer.canvas.getBoundingClientRect(), w = { x: e.clientX - r.left, y: e.clientY - r.top }, c = null;
+        try { c = viewer.scene.pickPositionSupported ? viewer.scene.pickPosition(w) : null; } catch (er) {}
+        if (!c) c = viewer.camera.pickEllipsoid(w, viewer.scene.globe.ellipsoid);
+        if (!c) { say('그 자리를 읽지 못했습니다. 땅이나 건물 위를 눌러 주세요.', true); return; }
+        var g = viewer.scene.globe.ellipsoid.cartesianToCartographic(c);
+        pickMode = false; viewer.canvas.style.cursor = '';
+        parent.postMessage({ type: 'vw-pick', lat: g.latitude / RAD, lng: g.longitude / RAD }, '*');
+      });
       parent.postMessage({ type: 'vw-ready' }, '*');
       pending.splice(0).forEach(handle);
       return;
