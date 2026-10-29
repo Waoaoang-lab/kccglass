@@ -26,12 +26,36 @@
 
   var opts = new vw.MapOptions(
     vw.BasemapType.GRAPHIC, '', vw.DensityType.FULL, vw.DensityType.BASIC, false,
-    new vw.CameraPosition(new vw.CoordZ(LNG, LAT, 1500), new vw.Direction(0, -90, 0)),
-    new vw.CameraPosition(new vw.CoordZ(LNG, LAT - 0.004, 500), new vw.Direction(0, -30, 0))
+    new vw.CameraPosition(new vw.CoordZ(LNG, LAT - 0.0025, 260), new vw.Direction(0, -40, 0)),
+    new vw.CameraPosition(new vw.CoordZ(LNG, LAT - 0.0025, 260), new vw.Direction(0, -40, 0))
   );
   var map = new vw.Map('vmap', opts);
   var viewer = null, ents = {}, urls = {}, pending = [];
   var fp = null, hideOn = true, hidden = [], hideT = 0, hideRuns = 0, pickMode = false;
+  var RADIUS = +q.get('r') || 100, siteC = null;
+
+  /* ---------- 실사 범위 제한: 현장 반경 밖은 그리지도, 불러오지도 않음 ----------
+     · 카메라 먼 거리 한계(far)를 "카메라~현장 거리 + 반경"으로 매 프레임 맞춤 → 그 밖의 건물·지형 조각은 요청 자체를 안 함
+     · 안개로 경계를 부드럽게, 화면이 멈춰 있으면 다시 그리지 않음 */
+  function siteCart() { return C3().fromDegrees(LNG, LAT, 30); }
+  function applyLimits() {
+    var sc = viewer.scene, on = RADIUS > 0;
+    try { sc.requestRenderMode = true; sc.maximumRenderTimeChange = Infinity; } catch (e) {}
+    try { sc.fog.enabled = true; sc.fog.density = on ? Math.min(0.02, 0.6 / (RADIUS + 150)) : 0.0002; sc.fog.screenSpaceErrorFactor = on ? 6 : 2; } catch (e) {}
+    try { var cc = sc.screenSpaceCameraController; cc.minimumZoomDistance = 15; cc.maximumZoomDistance = on ? Math.max(350, RADIUS * 4) : 20000; } catch (e) {}
+    try { sc.globe.tileCacheSize = on ? 60 : 100; } catch (e) {}
+    try { for (var i = 0; i < sc.primitives.length; i++) { var t = sc.primitives.get(i); if (t && 'maximumScreenSpaceError' in t && t.root) { t.dynamicScreenSpaceError = true; } } } catch (e) {}
+    siteC = siteCart();
+    if (!on) { try { viewer.camera.frustum.far = 5e8; } catch (e) {} }
+    redraw();
+  }
+  function clampFar() {
+    if (!(RADIUS > 0) || !siteC) return;
+    try {
+      var d = C3().distance(viewer.camera.positionWC, siteC);
+      viewer.camera.frustum.far = Math.max(250, d + RADIUS * 1.15);
+    } catch (e) {}
+  }
 
   // 안쪽 3D 엔진의 클래스는 이미 있는 객체에서 꺼내 씀
   function C3() { return viewer.camera.position.constructor; }
@@ -64,7 +88,7 @@
         model: { uri: urls[k], heightReference: 1, shadows: 1 }
       });
     });
-    fp = d.fp || null;
+    fp = d.fp || null; siteC = siteCart();
     restoreHidden();
     redraw();
     say('건물을 세웠습니다. 대지 안 기존 건물을 찾는 중…');
@@ -146,7 +170,9 @@
     } catch (e) { say('해 위치를 바꾸지 못했습니다: ' + e.message, true); }
   }
   function fly(d) {
-    var A = d.A * RAD, R = Math.max(d.H * 1.8, 220), h = d.H * 0.7 + 60;
+    // 범위 제한이 있으면 카메라를 현장 가까이 둠 (멀수록 넓게 불러오므로)
+    var lim = (d.r !== undefined ? d.r : RADIUS) > 0;
+    var A = d.A * RAD, R = lim ? Math.max(d.H * 0.95, 130 + RADIUS * 0.4) : Math.max(d.H * 1.8, 220), h = lim ? d.H * 0.6 + 35 : d.H * 0.7 + 60;
     var lat = d.lat + Math.cos(A) * R / 111320, lng = d.lng + Math.sin(A) * R / (111320 * Math.cos(d.lat * RAD));
     viewer.camera.flyTo({
       destination: C3().fromDegrees(lng, lat, h),
@@ -160,6 +186,7 @@
     try {
       if (d.type === 'place') place(d);
       else if (d.type === 'show') show(d.which);
+      else if (d.type === 'radius') { RADIUS = d.r; applyLimits(); say(RADIUS > 0 ? '실사 범위: 현장 반경 ' + RADIUS + 'm' : '실사 범위 제한을 껐습니다 (느려질 수 있습니다).'); }
       else if (d.type === 'time') setTime(d.ms);
       else if (d.type === 'fly') { fly(d); hideSoon(2200, 4); }
       else if (d.type === 'hide') { hideOn = d.on; if (hideOn) hideSoon(50, 4); else { restoreHidden(); redraw(); say('기존 건물을 다시 보이게 했습니다.'); } }
@@ -173,6 +200,9 @@
   (function wait() {
     if (window.ws3d && ws3d.viewer && ws3d.viewer.entities && ws3d.viewer.camera) {
       viewer = ws3d.viewer;
+      applyLimits();
+      try { viewer.scene.preRender.addEventListener(clampFar); } catch (e) {}
+      try { viewer.camera.moveEnd.addEventListener(function () { if (RADIUS > 0 && siteC && C3().distance(viewer.camera.positionWC, siteC) > RADIUS * 6 + 600) say('현장에서 너무 멀리 왔습니다. 실사 범위 밖은 보이지 않습니다.'); }); } catch (e) {}
       try { viewer.camera.moveEnd.addEventListener(function () { if (fp && hideOn) hideSoon(300, 3); }); } catch (e) {}
       setInterval(function () { if (fp && hideOn) hideOnce(); }, 3000);
       var down = null;

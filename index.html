@@ -171,9 +171,27 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 .vwpanel { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; background: var(--stage); }
 .t3 .vwpanel iframe { flex: 1; width: 100%; border: 0; display: block; min-height: 0; }
 .t3 .vwbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; background: var(--surface); border-top: 1px solid var(--line); }
+.t3 .vwbar select { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; margin-left: 4px; }
 .t3 .vwmsg { font-size: 12px; color: var(--muted); flex: 1 1 200px; min-width: 0; }
 .t3 .vwmsg.bad { color: #b45309; }
 .t3 #t3vwPick[aria-pressed="true"], .t3 #t3vwAuto[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.t3 .glprog { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.t3 .glprog i { display: block; height: 100%; width: 0; background: var(--sun); transition: width .2s; }
+.t3 .glsum { margin: 0; font-size: 13px; }
+.t3 .glsum:empty { display: none; }
+.t3 .glsum span { font-size: 11.5px; color: var(--muted); }
+.t3 .gllist { display: flex; flex-direction: column; gap: 6px; max-height: 520px; overflow-y: auto; }
+.t3 .gllist:empty { display: none; }
+.t3 .glrow { text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; padding: 8px 10px; font: inherit; color: var(--ink); cursor: pointer; display: grid; gap: 2px; }
+.t3 .glrow:hover { border-color: var(--accent); }
+.t3 .glrow[aria-pressed="true"] { border-color: var(--sun); box-shadow: 0 0 0 1px var(--sun); }
+.t3 .glrow b { font-size: 13px; font-weight: 600; }
+.t3 .glrow span { font-size: 12px; color: var(--muted); }
+.t3 .glrow .glface { color: var(--ink); font-weight: 500; }
+.t3 .lvl { display: inline-block; font-style: normal; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-right: 6px; }
+.t3 .lvl.h { background: #c2410c; color: #fff; }
+.t3 .lvl.m { background: #f59e0b; color: #1a1a1a; }
+.t3 .lvl.l { background: var(--line); color: var(--ink); }
 .tabs button { padding: 7px 16px; }
 /* ---------- 3D 일조 비교 ---------- */
 .t3 @media (prefers-color-scheme: dark) {
@@ -422,6 +440,14 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
           <button class="btn" id="t3vwAuto" aria-pressed="false">번갈아 보기</button>
           <button class="btn" id="t3vwPick" aria-pressed="false">실사에서 자리 찍기</button>
           <label class="chk"><input type="checkbox" id="t3vwHide" checked> 대지 기존 건물 숨기기</label>
+          <label class="chk">실사 범위
+            <select id="t3vwRad" aria-label="실사 범위">
+              <option value="100" selected>반경 100m</option>
+              <option value="200">반경 200m</option>
+              <option value="400">반경 400m</option>
+              <option value="0">제한 없음 (느림)</option>
+            </select>
+          </label>
           <span class="vwmsg" id="t3vwMsg">브이월드 실사를 여는 중…</span>
           <span class="spacer"></span>
           <button class="btn" id="t3vwClose">실사 닫기</button>
@@ -558,6 +584,28 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 
     <div class="card" id="t3cardA"></div>
     <div class="card" id="t3cardB"></div>
+
+    <div class="card" id="t3glCard">
+      <h2><span class="tag sun">!</span>반사 눈부심(현휘) 분석</h2>
+      <p class="note">유리에 비친 햇빛이 인접 건물의 어느 면, 몇 층에, 1년 중 언제 닿는지 계산합니다. 실제 주변을 켜면 실제 이웃 건물로 분석합니다.</p>
+      <div class="namebox"><span>분석 유리</span><select id="t3glGlass" aria-label="분석할 유리"></select></div>
+      <div class="namebox"><span>기간</span>
+        <div class="seg fill" role="group" aria-label="분석 기간">
+          <button id="t3glYear" aria-pressed="true">1년</button>
+          <button id="t3glDay" aria-pressed="false">선택한 날</button>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="t3glRun" type="button">분석 실행</button>
+        <label class="chk"><input type="checkbox" id="t3glLive"> 지금 시각 반사광선 보기</label>
+      </div>
+      <p class="note" id="t3glLiveMsg" hidden></p>
+      <div class="glprog" id="t3glProg" hidden><i></i></div>
+      <p class="glsum" id="t3glSum"></p>
+      <div class="gllist" id="t3glTable"></div>
+      <button class="btn" id="t3glCopy" type="button" hidden>결과 표 복사</button>
+      <p class="note">검토 우선순위 기준: 높음은 연간 30일 이상(반사율 15% 이상) 또는 30시간 이상, 보통은 10일 또는 8시간 이상입니다. 2021년 대법원(해운대 아이파크) 판결에서 피해 세대의 강한 반사광 일수는 연 31~187일이었습니다. 국내에는 반사율 수치 기준이 아직 없습니다. 이 결과는 설계 초기 검토용 추정이며, 공식 빛반사 영향평가를 대신하지 않습니다.</p>
+    </div>
 
     <div class="card">
       <h2>참고</h2>
@@ -1880,7 +1928,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     const mF = facadeMat(o.kind, o.tint || '#ffffff', Math.max(1, Math.round(w / bay)), ry);
     const mS = facadeMat(o.side || o.kind, o.tint || '#ffffff', Math.max(1, Math.round(d / (o.sideBay || bay))), ry);
     const m = new THREE.Mesh(UBOX, [mS, mS, ctxRoof, ctxRoof, mF, mF]);
-    m.scale.set(w, h, d); m.position.set(x, h / 2, z);
+    m.scale.set(w, h, d); m.position.set(x, h / 2, z); m.userData.prism = { fl };
     m.castShadow = m.receiveShadow = true; context.add(m);
   }
   function pave(w, d, x, z, mat = paveMat, h = 0.15) {
@@ -1904,6 +1952,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   };
   function buildContext() {
     context.clear();
+    document.dispatchEvent(new Event('ctx-change'));
     if (ctxMode === 'real' && real && (real.ground || real.blds)) { buildRealContext(); return; }
     const dens = val('ctxDen') / 100;
     $('ctxNote').textContent = dens ? CTX_NOTE[btype] : '주변 건물 없이 대지만 표시합니다.';
@@ -2419,6 +2468,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     pill.textContent = over ? '흐림 (직사광 없음)' : lit ? `직사광 받음 (입사각 ${(Math.acos(Math.min(1, fn.dot(d))) / RAD).toFixed(0)}°)` : alt > 0 ? '그늘 (해가 반대쪽)' : '해가 진 시간';
     $('clock').textContent = `${dt.getMonth() + 1}월 ${dt.getDate()}일 ${hm(mins)} · 고도 ${alt.toFixed(0)}°`;
     if (vwOpen) vwTimeSoon();
+    if (glLiveOn) glLiveSoon();
   }
   $('time').oninput = () => updateSun();
   $('time').onchange = () => updateSun(true);
@@ -2618,7 +2668,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   /* ---------- 실제 현장: 브이월드 위성사진 바닥 + 실제 주변 건물 ---------- */
   const VW_KEY = '1C529277-B5E8-4B90-A0DE-F81F09E4C4E4';
   const onSite = /github\.io$/.test(location.hostname);
-  let ctxMode = 'virtual', real = null, realReq = 0;
+  let ctxMode = 'virtual', real = null, realReq = 0, realPrismList = [];
   const vwSay = (id, t, bad) => { const el = $(id); el.textContent = t; el.classList.toggle('bad', !!bad); };
   const M = 111320; // 위도·경도 1도당 m (현장 지도 윤곽과 같은 기준)
   function loadReal(lat, lng) {
@@ -2703,7 +2753,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     return c;
   }
   function buildRealContext() {
-    context.rotation.y = 0;
+    context.rotation.y = 0; realPrismList = [];
     if (real.ground) {
       const g = real.ground;
       const m = new THREE.Mesh(new THREE.PlaneGeometry(g.w, g.h), new THREE.MeshStandardMaterial({ map: g.tex, roughness: 0.95 }));
@@ -2721,6 +2771,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       const r1 = rnd(), r2 = rnd();
       if (btype === 'real' ? b === realTarget : (inPoly(0, 0, P) || inSite(cx, cz))) return;
       const fl = b.floors > 0 ? b.floors : 2, h = fl * 3.4;
+      realPrismList.push({ pts: P, h, flh: 3.4, floors: fl });
       const kind = fl >= 20 ? (r1 < 0.6 ? 'cw' : 'stone') : fl >= 6 ? (r1 < 0.35 ? 'apt' : r1 < 0.65 ? 'stone' : 'cw') : 'shop';
       const tint = kind === 'cw' ? ['#7d8f9c', '#8f989d', '#6f8580', '#5d6670'][Math.floor(r2 * 4)] : kind === 'shop' ? ['#c9b8a4', '#a98f7c', '#9c9a95', '#b7a99a'][Math.floor(r2 * 4)] : ['#d8d2c8', '#b9b2a6', '#a7a29b', '#c7b8a5'][Math.floor(r2 * 4)];
       const key = kind + '|' + tint, gp = groups[key] || (groups[key] = { kind, tint, pos: [], uv: [] });
@@ -2829,7 +2880,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       vwFrame().postMessage({ type: 'time', ms: Date.UTC(y, mo - 1, d, 0, mins) - 9 * 3600e3 }, '*');
     }, 150);
   }
-  function vwFly() { if (vwReady) vwFrame().postMessage({ type: 'fly', lat: LAT, lng: LON, H: dims.H, A: val('orient') }, '*'); }
+  function vwFly() { if (vwReady) vwFrame().postMessage({ type: 'fly', lat: LAT, lng: LON, H: dims.H, A: val('orient'), r: +$('vwRad').value }, '*'); }
   function vwShow(k) {
     vwWhich = k;
     $('vwA').setAttribute('aria-pressed', k === 'A'); $('vwB').setAttribute('aria-pressed', k === 'B');
@@ -2848,7 +2899,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   $('vwOpen').hidden = !onSite;
   $('vwOpen').onclick = () => {
     vwOpen = true; $('vwPanel').hidden = false;
-    const src = `vw3d.html?lat=${LAT}&lng=${LON}`;
+    const src = `vw3d.html?lat=${LAT}&lng=${LON}&r=${$('vwRad').value}`;
     if (src !== vwFrameSrc && !vwReady) { vwFrameSrc = src; $('vwFrame').src = src; vwMsg('브이월드 실사를 여는 중… (처음엔 10초쯤 걸립니다)'); }
     else { vwPushModel(); vwTimeSoon(); vwFly(); }
   };
@@ -2858,6 +2909,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     $('vwPick').setAttribute('aria-pressed', on);
     if (vwReady) vwFrame().postMessage({ type: 'pickmode', on }, '*');
   };
+  $('vwRad').onchange = e => { if (vwReady) vwFrame().postMessage({ type: 'radius', r: +e.target.value }, '*'); };
   $('vwHide').onchange = e => { if (vwReady) vwFrame().postMessage({ type: 'hide', on: e.target.checked }, '*'); };
   $('vwA').onclick = () => vwShow('A'); $('vwB').onclick = () => vwShow('B');
   $('vwAuto').onclick = () => {
@@ -2867,6 +2919,312 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   };
   document.addEventListener('bld-change', vwModelSoon);
   document.addEventListener('glass-pick', vwModelSoon);
+
+  /* ---------- 현휘(반사 눈부심) 분석 엔진 ----------
+     좌표: x = 동, y = 위, z = 남 (m). 인접 건물은 바닥 윤곽 [[x,z]...]을 높이 h로 올린 기둥(프리즘)으로 봄.
+     각 시각마다: 유리 표본점이 해를 직접 받는지(인접 건물이 가리는지) 확인 → 거울 반사 방향으로 광선을 쏴서
+     처음 닿는 인접 건물 벽(몇 층, 어느 면)·옥상·지면을 찾음 */
+  const GlareEngine = (() => {
+    function prepPrisms(list) {
+      return list.map((b, id) => {
+        const P = b.pts; let cx = 0, cz = 0; P.forEach(p => { cx += p[0]; cz += p[1]; }); cx /= P.length; cz /= P.length;
+        let r = 0; P.forEach(p => { r = Math.max(r, Math.hypot(p[0] - cx, p[1] - cz)); });
+        return { id, pts: P, h: b.h, flh: b.flh || 3.4, floors: b.floors || Math.max(1, Math.round(b.h / (b.flh || 3.4))), cx, cz, r, label: b.label || '' };
+      });
+    }
+    function inPoly(x, z, P) {
+      let c = false;
+      for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+        const xi = P[i][0], zi = P[i][1], xj = P[j][0], zj = P[j][1];
+        if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c;
+      }
+      return c;
+    }
+    // 광선 o + t·d 와 프리즘들의 가장 가까운 교점. anyHit=true면 하나라도 닿으면 바로 true
+    function trace(o, d, prisms, maxT, anyHit, ground) {
+      let best = null, bt = maxT;
+      const dl = Math.hypot(d[0], d[2]);
+      for (let k = 0; k < prisms.length; k++) {
+        const b = prisms[k];
+        if (o[1] >= b.h && d[1] >= 0) continue;
+        // 2D 거리 예비 검사
+        const ex = b.cx - o[0], ez = b.cz - o[2];
+        if (dl > 1e-9) {
+          const along = (ex * d[0] + ez * d[2]) / dl;
+          if (along < -b.r) continue;
+          const perp = Math.abs(ex * d[2] - ez * d[0]) / dl;
+          if (perp > b.r) continue;
+        } else if (Math.hypot(ex, ez) > b.r) continue;
+        const P = b.pts, n = P.length;
+        for (let i = 0; i < n; i++) {
+          const a = P[i], c = P[(i + 1) % n], sx = c[0] - a[0], sz = c[1] - a[1];
+          const den = d[0] * sz - d[2] * sx;
+          if (Math.abs(den) < 1e-12) continue;
+          const qx = a[0] - o[0], qz = a[1] - o[2];
+          const t = (qx * sz - qz * sx) / den, s = (qx * d[2] - qz * d[0]) / den;
+          if (t <= 0.05 || t >= bt || s < 0 || s > 1) continue;
+          const y = o[1] + t * d[1];
+          if (y < 0 || y > b.h) continue;
+          if (anyHit) return true;
+          bt = t; best = { b, kind: 'wall', edge: i, t, y };
+        }
+        if (d[1] < 0 && o[1] > b.h) {
+          const t = (b.h - o[1]) / d[1];
+          if (t > 0.05 && t < bt) {
+            const x = o[0] + t * d[0], z = o[2] + t * d[2];
+            if (inPoly(x, z, P)) { if (anyHit) return true; bt = t; best = { b, kind: 'roof', t, y: b.h }; }
+          }
+        }
+      }
+      if (anyHit) return false;
+      if (ground && d[1] < 0) {
+        const t = -o[1] / d[1];
+        if (t > 0.05 && t < bt) { bt = t; best = { b: null, kind: 'ground', t, y: 0 }; }
+      }
+      if (best) best.p = [o[0] + bt * d[0], o[1] + bt * d[1], o[2] + bt * d[2]];
+      return best;
+    }
+    // 벽 교점의 바깥 방향(광선이 들어온 쪽)
+    function wallNormal(hit, d) {
+      const P = hit.b.pts, a = P[hit.edge], c = P[(hit.edge + 1) % P.length];
+      let nx = c[1] - a[1], nz = -(c[0] - a[0]); const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
+      if (nx * d[0] + nz * d[2] > 0) { nx = -nx; nz = -nz; }
+      return [nx, nz];
+    }
+    // 한 시각에 대해: 표본마다 반사광이 닿는 곳
+    function step(samples, sun, prisms, R0, maxT) {
+      const out = [];
+      for (let i = 0; i < samples.length; i++) {
+        const s = samples[i], n = s.n;
+        const c = n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2];
+        if (c <= 0.02) continue;                                   // 해가 유리 뒤쪽
+        const o = [s.p[0] + n[0] * 0.3, s.p[1] + n[1] * 0.3, s.p[2] + n[2] * 0.3];
+        if (trace(o, sun, prisms, 2000, true, false)) continue;     // 인접 건물이 해를 가림
+        const r = [2 * c * n[0] - sun[0], 2 * c * n[1] - sun[1], 2 * c * n[2] - sun[2]]; // 반사 방향
+        const hit = trace(o, r, prisms, maxT, false, true);
+        if (!hit) continue;
+        const R = R0 + (1 - R0) * Math.pow(1 - c, 5);               // 입사각에 따른 반사율 (비스듬할수록 커짐)
+        out.push({ si: i, hit, R, inc: Math.acos(Math.min(1, c)) * 180 / Math.PI, r });
+      }
+      return out;
+    }
+    return { prepPrisms, trace, step, wallNormal, inPoly };
+  })();
+
+  /* ---------- 현휘 분석 화면 ---------- */
+  var glLiveOn = false;
+  let glSampleCache = null, glRows = [], glSel = -1, glLiveT = 0, glPeriod = 'year';
+  const glViz = new THREE.Group(); scene.add(glViz);
+  const glLive = new THREE.Group(); scene.add(glLive);
+  const LVL = { h: '높음', m: '보통', l: '낮음' };
+  function glClearGroup(g) { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); g.clear(); }
+  function glR0() {
+    const v = $('glGlass').value;
+    return v === 'max' ? 0.45 : glass[v].lro / 100;
+  }
+  function glFillGlass() {
+    const cur = $('glGlass').value;
+    const opt = k => `<option value="${k}">유리 ${k} · ${glass[k].key} (외부 반사율 ${glass[k].lro}%)</option>`;
+    $('glGlass').innerHTML = opt('A') + opt('B') + '<option value="max">카탈로그 최고 반사 · MZT128 (45%)</option>';
+    $('glGlass').value = cur || (glass.A.lro >= glass.B.lro ? 'A' : 'B');
+  }
+  // 인접 건물 → 프리즘 목록
+  function glPrisms() {
+    scene.updateMatrixWorld(true);
+    const list = [], v = new THREE.Vector3();
+    context.children.forEach(m => {
+      if (!m.userData.prism) return;
+      const pts = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([a, b]) => { v.set(a, -0.5, b).applyMatrix4(m.matrixWorld); return [v.x, v.z]; });
+      list.push({ pts, h: m.scale.y, flh: m.userData.prism.fl });
+    });
+    if (ctxMode === 'real') list.push(...realPrismList);
+    return GlareEngine.prepPrisms(list);
+  }
+  // 우리 건물 유리면 → 표본점(위치·바깥 방향)
+  function glSamples() {
+    if (glSampleCache) return glSampleCache;
+    bld.updateMatrixWorld(true);
+    const planes = [], insts = [], out = [];
+    glassMeshes.forEach(m => { if (!m) return; (m.isInstancedMesh ? insts : planes).push(m); });
+    let area = 0; planes.forEach(m => { area += m.geometry.parameters.width * m.geometry.parameters.height; });
+    const sp = Math.max(2, Math.sqrt(area / 800)), p = new THREE.Vector3(), n = new THREE.Vector3(), M = new THREE.Matrix4();
+    planes.forEach(m => {
+      const W = m.geometry.parameters.width, H = m.geometry.parameters.height;
+      const nu = Math.max(1, Math.round(W / sp)), nv = Math.max(1, Math.round(H / sp));
+      n.set(0, 0, 1).transformDirection(m.matrixWorld);
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+        p.set(((i + 0.5) / nu - 0.5) * W, ((j + 0.5) / nv - 0.5) * H, 0).applyMatrix4(m.matrixWorld);
+        out.push({ p: [p.x, p.y, p.z], n: [n.x, n.y, n.z] });
+      }
+    });
+    const total = insts.reduce((a, m) => a + m.count, 0), stride = Math.max(1, Math.ceil(total / 800));
+    insts.forEach(m => {
+      for (let i = 0; i < m.count; i += stride) {
+        m.getMatrixAt(i, M); M.premultiply(m.matrixWorld);
+        p.set(0, 0, 0).applyMatrix4(M); n.set(0, 0, 1).transformDirection(M);
+        out.push({ p: [p.x, p.y, p.z], n: [n.x, n.y, n.z] });
+      }
+    });
+    return (glSampleCache = out);
+  }
+  const azOf = (x, z) => ((Math.atan2(x, -z) / RAD) + 360) % 360;
+  const monthsText = set => {
+    const a = [...set].sort((x, y) => x - y), r = [];
+    for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; r.push(i === j ? a[i] + '월' : `${a[i]}~${a[j]}월`); i = j; }
+    return r.join(', ');
+  };
+  function glInvalidate(why) {
+    glClearGroup(glViz); glRows = []; glSel = -1; glSampleCache = null;
+    if ($('glTable').innerHTML) { $('glTable').innerHTML = ''; $('glSum').textContent = why; $('glCopy').hidden = true; }
+    if (glLiveOn) glLiveSoon();
+  }
+  document.addEventListener('bld-change', () => glInvalidate('건물이 바뀌어 결과를 지웠습니다. 다시 분석해 주세요.'));
+  document.addEventListener('ctx-change', () => glInvalidate('주변 건물이 바뀌어 결과를 지웠습니다. 다시 분석해 주세요.'));
+
+  async function glRun() {
+    const prisms = glPrisms(), samples = glSamples(), R0 = glR0();
+    if (!samples.length) { $('glSum').textContent = '유리면을 찾지 못했습니다.'; return; }
+    if (!prisms.length) { $('glSum').textContent = '주변 건물이 없어 분석할 대상이 없습니다. 주변 밀도를 올리거나 실제 주변을 켜 주세요.'; return; }
+    const btn = $('glRun'); btn.disabled = true; $('glProg').hidden = false;
+    const year = glPeriod === 'year', y0 = curDate().getFullYear();
+    const days = year ? Array.from({ length: 37 }, (_, i) => new Date(y0, 0, 1 + i * 10)) : [curDate()];
+    const stepMin = year ? 15 : 5, scale = year ? 365 / days.length : 1;
+    const groups = new Map();
+    const t0 = performance.now();
+    for (let di = 0; di < days.length; di++) {
+      const dt = days[di], [rs, ss] = riseSet(dt);
+      for (let mins = Math.ceil(rs / stepMin) * stepMin; mins <= ss; mins += stepMin) {
+        const { alt, az } = sunAt(dt, mins);
+        if (alt < 3) continue;
+        const sv = sunVec(alt, az), res = GlareEngine.step(samples, [sv.x, sv.y, sv.z], prisms, R0, 700);
+        const seen = new Set();
+        for (const r of res) {
+          const h = r.hit, key = h.kind === 'ground' ? 'G' : h.b.id + '|' + (h.kind === 'roof' ? 'R' : h.edge);
+          let g = groups.get(key);
+          if (!g) groups.set(key, g = { key, hit: h, floors: new Map(), days: new Set(), months: new Set(), tmin: 1e9, tmax: -1, minutes: 0, maxR: 0, maxInc: 0, pts: [], src: new Map(), hy: [1e9, -1] });
+          if (!seen.has(key)) { seen.add(key); g.minutes += stepMin; g.days.add(di); g.months.add(dt.getMonth() + 1); g.tmin = Math.min(g.tmin, mins); g.tmax = Math.max(g.tmax, mins); }
+          if (h.kind === 'wall') {
+            const fl = Math.min(h.b.floors, Math.floor(h.y / h.b.flh) + 1), fk = key + '|' + fl;
+            if (!seen.has(fk)) { seen.add(fk); g.floors.set(fl, (g.floors.get(fl) || 0) + stepMin); }
+          }
+          if (r.R > g.maxR) { g.maxR = r.R; g.maxInc = r.inc; }
+          if (g.pts.length < 500) g.pts.push([h.p[0] - r.r[0] * 0.4, h.p[1] - r.r[1] * 0.4, h.p[2] - r.r[2] * 0.4, r.R]);
+          const s = samples[r.si], sk = dirName(azOf(s.n[0], s.n[2]));
+          g.src.set(sk, (g.src.get(sk) || 0) + 1);
+          g.hy[0] = Math.min(g.hy[0], s.p[1]); g.hy[1] = Math.max(g.hy[1], s.p[1]);
+        }
+      }
+      $('glProg').firstElementChild.style.width = ((di + 1) / days.length * 100) + '%';
+      $('glSum').textContent = `계산 중… ${di + 1}/${days.length}일`;
+      await new Promise(r => setTimeout(r, 0));
+    }
+    // 결과 정리
+    glRows = [...groups.values()].map(g => {
+      const h = g.hit, estDays = year ? Math.round(g.days.size * scale) : 0, hours = g.minutes * scale / 60;
+      let lvl;
+      if (year) lvl = (estDays >= 30 && g.maxR >= 0.15) || hours >= 30 ? 'h' : estDays >= 10 || hours >= 8 ? 'm' : 'l';
+      else lvl = g.minutes >= 60 ? 'h' : g.minutes >= 20 ? 'm' : 'l';
+      let title, face = '';
+      if (h.kind === 'ground') title = '지상 (도로·보행자)';
+      else {
+        const b = h.b, dist = Math.round(Math.hypot(b.cx, b.cz));
+        title = `${dirName(azOf(b.cx, b.cz))}쪽 ${dist}m · 지상 ${b.floors}층 건물`;
+        if (h.kind === 'roof') face = '옥상';
+        else {
+          const [nx, nz] = GlareEngine.wallNormal(h, [-b.cx, 0, -b.cz]);
+          const fls = [...g.floors.keys()].sort((a, c) => a - c), top = [...g.floors.entries()].sort((a, c) => c[1] - a[1])[0];
+          face = `${dirName(azOf(nx, nz))}쪽 면 ${fls[0]}${fls.length > 1 ? '~' + fls[fls.length - 1] : ''}층` + (top && fls.length > 1 ? ` (가장 잦은 층 ${top[0]}층)` : '');
+          g.floorsSorted = fls;
+        }
+      }
+      const src = [...g.src.entries()].sort((a, c) => c[1] - a[1]).slice(0, 2).map(e => e[0]).join('·');
+      return { g, lvl, title, face, estDays, hours,
+        when: `${year ? monthsText(g.months) + ' · ' : ''}${hm(g.tmin)}~${hm(g.tmax + stepMin)}`,
+        amount: year ? `연간 약 ${estDays}일 · ${hours < 1 ? '1시간 미만' : Math.round(hours) + '시간'}` : `이날 ${g.minutes}분`,
+        refl: `반사율 최대 ${Math.round(g.maxR * 100)}% (입사각 ${Math.round(g.maxInc)}°)`,
+        src: `원인: 우리 건물 ${src}면 ${Math.round(g.hy[0])}~${Math.round(g.hy[1])}m 높이`,
+        score: { h: 3, m: 2, l: 1 }[lvl] * 1e6 + (year ? estDays * 1000 : 0) + g.minutes };
+    }).sort((a, b) => b.score - a.score);
+    glRender(year, ((performance.now() - t0) / 1000).toFixed(1));
+    btn.disabled = false; $('glProg').hidden = true;
+  }
+  function glRender(year, secs) {
+    glClearGroup(glViz);
+    const nB = glRows.filter(r => r.g.hit.kind !== 'ground').length, nH = glRows.filter(r => r.lvl === 'h').length;
+    const gname = $('glGlass').selectedOptions[0].textContent;
+    $('glSum').innerHTML = glRows.length
+      ? `<b>${nB}곳</b>의 인접 건물 면·옥상${glRows.some(r => r.g.hit.kind === 'ground') ? '과 지상' : ''}에 반사광이 닿습니다. 검토 우선순위 높음 <b>${nH}곳</b>.<br><span>${gname} · ${year ? '1년(10일 간격, 15분 단위)' : '선택한 날(5분 단위)'} · ${secs}초</span>`
+      : `반사광이 인접 건물에 닿지 않습니다.<br><span>${gname} · ${year ? '1년' : '선택한 날'}</span>`;
+    $('glTable').innerHTML = glRows.slice(0, 40).map((r, i) => `
+      <button class="glrow" data-i="${i}" aria-pressed="false">
+        <b><i class="lvl ${r.lvl}">${LVL[r.lvl]}</i>${r.title}</b>
+        ${r.face ? `<span class="glface">${r.face}</span>` : ''}
+        <span>${r.when} · ${r.amount}</span>
+        <span>${r.refl}</span>
+        <span>${r.src}</span>
+      </button>`).join('');
+    $('glCopy').hidden = !glRows.length;
+    $('glTable').querySelectorAll('.glrow').forEach(b => b.onclick = () => glSelect(+b.dataset.i));
+    // 3D 표시: 닿는 곳에 색 점 (노랑 → 빨강 = 반사율 높음)
+    const pos = [], col = [], c = new THREE.Color(), lo = new THREE.Color('#ffd23f'), hi = new THREE.Color('#e8452c');
+    glRows.forEach(r => r.g.pts.forEach(p => { pos.push(p[0], p[1], p[2]); c.copy(lo).lerp(hi, Math.max(0, Math.min(1, (p[3] - 0.08) / 0.3))); col.push(c.r, c.g, c.b); }));
+    if (pos.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      glViz.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 2.6, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false })));
+    }
+    glSel = -1;
+  }
+  function glSelect(i) {
+    glSel = glSel === i ? -1 : i;
+    $('glTable').querySelectorAll('.glrow').forEach(b => b.setAttribute('aria-pressed', +b.dataset.i === glSel));
+    while (glViz.children.length > 1) { const o = glViz.children.pop(); o.geometry.dispose(); o.material.dispose(); }
+    if (glViz.children[0]) glViz.children[0].material.opacity = glSel < 0 ? 0.9 : 0.25;
+    if (glSel < 0) return;
+    const r = glRows[glSel], pos = [], cen = new THREE.Vector3();
+    r.g.pts.forEach(p => { pos.push(p[0], p[1], p[2]); cen.x += p[0]; cen.y += p[1]; cen.z += p[2]; });
+    cen.multiplyScalar(1 / r.g.pts.length);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    glViz.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 5, color: 0xff3b1f, sizeAttenuation: true, depthTest: false, transparent: true })));
+    // 그 면을 우리 건물 쪽에서 바라보게 카메라 이동
+    const toUs = new THREE.Vector3(-cen.x, 0, -cen.z); if (toUs.lengthSq() < 1) toUs.set(0, 0, 1); toUs.normalize();
+    const dist = Math.max(70, Math.min(260, cen.length() * 0.9));
+    camera.position.copy(cen).addScaledVector(toUs, dist).setY(Math.max(cen.y + dist * 0.35, 20));
+    controls.target.copy(cen); controls.update();
+  }
+  // 지금 시각 반사광선
+  function glLiveSoon() { clearTimeout(glLiveT); glLiveT = setTimeout(glLiveDraw, 120); }
+  function glLiveDraw() {
+    glClearGroup(glLive);
+    if (!glLiveOn) return;
+    const { alt, az } = sunAt(curDate(), val('time'));
+    if (alt < 3) { $('glLiveMsg').textContent = '지금 시각엔 해가 낮거나 져서 반사가 없습니다.'; return; }
+    const samples = glSamples(), prisms = glPrisms(), sv = sunVec(alt, az);
+    const res = GlareEngine.step(samples, [sv.x, sv.y, sv.z], prisms, glR0(), 700);
+    const pos = [], pts = [];
+    const stride = Math.max(1, Math.ceil(res.length / 400));
+    for (let i = 0; i < res.length; i += stride) { const r = res[i], s = samples[r.si].p; pos.push(s[0], s[1], s[2], r.hit.p[0], r.hit.p[1], r.hit.p[2]); pts.push(r.hit.p[0], r.hit.p[1], r.hit.p[2]); }
+    if (pos.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      glLive.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffb020, transparent: true, opacity: 0.55, depthWrite: false })));
+      const g2 = new THREE.BufferGeometry(); g2.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      glLive.add(new THREE.Points(g2, new THREE.PointsMaterial({ size: 3, color: 0xff6a00, sizeAttenuation: true, depthWrite: false })));
+    }
+    const walls = new Set(res.filter(r => r.hit.kind !== 'ground').map(r => r.hit.b.id)).size, ground = res.some(r => r.hit.kind === 'ground');
+    $('glLiveMsg').textContent = res.length ? `지금 시각: 반사광이 인접 건물 ${walls}동${ground ? '과 지상' : ''}에 닿습니다 (주황 선).` : '지금 시각엔 반사광이 인접 건물에 닿지 않습니다.';
+  }
+  $('glRun').onclick = () => glRun();
+  $('glYear').onclick = () => { glPeriod = 'year'; $('glYear').setAttribute('aria-pressed', 'true'); $('glDay').setAttribute('aria-pressed', 'false'); };
+  $('glDay').onclick = () => { glPeriod = 'day'; $('glYear').setAttribute('aria-pressed', 'false'); $('glDay').setAttribute('aria-pressed', 'true'); };
+  $('glLive').onchange = e => { glLiveOn = e.target.checked; $('glLiveMsg').hidden = !glLiveOn; glLiveDraw(); };
+  $('glGlass').onchange = () => { if (glLiveOn) glLiveDraw(); };
+  document.addEventListener('glass-pick', () => glFillGlass());
+  $('glCopy').onclick = () => {
+    const txt = ['우선순위\t대상\t면·층\t시기·시간대\t영향\t반사율\t원인'].concat(glRows.map(r => [LVL[r.lvl], r.title, r.face, r.when, r.amount, r.refl, r.src].join('\t'))).join('\n');
+    const done = () => { $('glCopy').textContent = '복사됨'; setTimeout(() => { $('glCopy').textContent = '결과 표 복사'; }, 1500); };
+    try { navigator.clipboard.writeText(txt).then(done, () => { $('glSum').textContent = '복사가 막혔습니다. 결과 목록을 직접 선택해 복사해 주세요.'; }); } catch (e) { $('glSum').textContent = '복사가 막혔습니다.'; }
+  };
+  glFillGlass();
 
   // 현장 위치(네이버 지도 연동에서 사용)
   window.glass3d = {
