@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>브이월드 실사 3D</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1a2228; overflow: hidden; }
+  #vmap { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+<div id="vmap"></div>
+<script>
+  // 유리 색상 비교기(index.html) 안에서 iframe으로 열리는 브이월드 실사 3D 화면
+  var KEY = '1C529277-B5E8-4B90-A0DE-F81F09E4C4E4';
+  document.write('<script src="https://map.vworld.kr/js/webglMapInit.js.do?version=2.0&apiKey=' + KEY + '&domain=' + encodeURIComponent('https://waoaoang-lab.github.io') + '"><\/script>');
+</script>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var LAT = +q.get('lat') || 37.5163, LNG = +q.get('lng') || 127.0203;
+  var RAD = Math.PI / 180;
+  function say(t, bad) { parent.postMessage({ type: 'vw-status', text: t, bad: !!bad }, '*'); }
+  if (!window.vw || !vw.Map) { say('브이월드 3D를 불러오지 못했습니다. 새로고침해 주세요.', true); return; }
+
+  var opts = new vw.MapOptions(
+    vw.BasemapType.GRAPHIC, '', vw.DensityType.FULL, vw.DensityType.BASIC, false,
+    new vw.CameraPosition(new vw.CoordZ(LNG, LAT, 1500), new vw.Direction(0, -90, 0)),
+    new vw.CameraPosition(new vw.CoordZ(LNG, LAT - 0.004, 500), new vw.Direction(0, -30, 0))
+  );
+  var map = new vw.Map('vmap', opts);
+  var viewer = null, ents = {}, urls = {}, pending = [];
+
+  // 안쪽 3D 엔진의 클래스는 이미 있는 객체에서 꺼내 씀
+  function C3() { return viewer.camera.position.constructor; }
+  function enuQuat(lng, lat) {
+    // 현장 지점의 동·북·위 축 → 모델 축 (모델은 x=동, y=북, z=위)
+    var l = lng * RAD, p = lat * RAD;
+    var e = [-Math.sin(l), Math.cos(l), 0];
+    var n = [-Math.sin(p) * Math.cos(l), -Math.sin(p) * Math.sin(l), Math.cos(p)];
+    var u = [Math.cos(p) * Math.cos(l), Math.cos(p) * Math.sin(l), Math.sin(p)];
+    var m00 = e[0], m01 = n[0], m02 = u[0], m10 = e[1], m11 = n[1], m12 = u[1], m20 = e[2], m21 = n[2], m22 = u[2];
+    var t = m00 + m11 + m22, x, y, z, w, s;
+    if (t > 0) { s = 0.5 / Math.sqrt(t + 1); w = 0.25 / s; x = (m21 - m12) * s; y = (m02 - m20) * s; z = (m10 - m01) * s; }
+    else if (m00 > m11 && m00 > m22) { s = 2 * Math.sqrt(1 + m00 - m11 - m22); w = (m21 - m12) / s; x = 0.25 * s; y = (m01 + m10) / s; z = (m02 + m20) / s; }
+    else if (m11 > m22) { s = 2 * Math.sqrt(1 + m11 - m00 - m22); w = (m02 - m20) / s; x = (m01 + m10) / s; y = 0.25 * s; z = (m12 + m21) / s; }
+    else { s = 2 * Math.sqrt(1 + m22 - m00 - m11); w = (m10 - m01) / s; x = (m02 + m20) / s; y = (m12 + m21) / s; z = 0.25 * s; }
+    return { x: x, y: y, z: z, w: w };
+  }
+  function redraw() { try { viewer.scene.requestRender && viewer.scene.requestRender(); } catch (e) {} }
+
+  function place(d) {
+    LAT = d.lat; LNG = d.lng;
+    ['A', 'B'].forEach(function (k) {
+      if (ents[k]) { viewer.entities.remove(ents[k]); ents[k] = null; }
+      if (urls[k]) URL.revokeObjectURL(urls[k]);
+      urls[k] = URL.createObjectURL(new Blob([d[k]], { type: 'model/gltf-binary' }));
+      ents[k] = viewer.entities.add({
+        position: C3().fromDegrees(LNG, LAT, 0),
+        orientation: enuQuat(LNG, LAT),
+        show: k === (d.show || 'A'),
+        model: { uri: urls[k], heightReference: 1, shadows: 1 }
+      });
+    });
+    redraw();
+    say('건물을 세웠습니다. 유리 A·B 버튼으로 바꿔 보세요.');
+  }
+  function show(k) { ['A', 'B'].forEach(function (x) { if (ents[x]) ents[x].show = x === k; }); redraw(); }
+  function setTime(ms) {
+    try {
+      var JD = viewer.clock.currentTime.constructor;
+      viewer.clock.shouldAnimate = false;
+      viewer.clock.currentTime = JD.fromDate(new Date(ms));
+      viewer.shadows = true;
+      try { viewer.scene.globe.enableLighting = true; } catch (e) {}
+      redraw();
+    } catch (e) { say('해 위치를 바꾸지 못했습니다: ' + e.message, true); }
+  }
+  function fly(d) {
+    var A = d.A * RAD, R = Math.max(d.H * 1.8, 220), h = d.H * 0.7 + 60;
+    var lat = d.lat + Math.cos(A) * R / 111320, lng = d.lng + Math.sin(A) * R / (111320 * Math.cos(d.lat * RAD));
+    viewer.camera.flyTo({
+      destination: C3().fromDegrees(lng, lat, h),
+      orientation: { heading: (d.A + 180) * RAD, pitch: -Math.atan((h - d.H * 0.4) / R), roll: 0 },
+      duration: 1.5
+    });
+  }
+  function handle(d) {
+    if (!d || !d.type) return;
+    if (!viewer) { pending.push(d); return; }
+    try {
+      if (d.type === 'place') place(d);
+      else if (d.type === 'show') show(d.which);
+      else if (d.type === 'time') setTime(d.ms);
+      else if (d.type === 'fly') fly(d);
+    } catch (e) { say('오류: ' + e.message, true); }
+  }
+  window.addEventListener('message', function (e) { if (e.source === parent) handle(e.data); });
+
+  // 3D 엔진이 준비되면 알림
+  var tries = 0;
+  (function wait() {
+    if (window.ws3d && ws3d.viewer && ws3d.viewer.entities && ws3d.viewer.camera) {
+      viewer = ws3d.viewer;
+      parent.postMessage({ type: 'vw-ready' }, '*');
+      pending.splice(0).forEach(handle);
+      return;
+    }
+    if (++tries > 120) { say('브이월드 3D 엔진이 준비되지 않았습니다. 새로고침해 주세요.', true); return; }
+    setTimeout(wait, 250);
+  })();
+})();
+</script>
+</body>
+</html>

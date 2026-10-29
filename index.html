@@ -168,6 +168,12 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 .ovimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; opacity: .45; z-index: 1; }
 .t3 .chip, .t3 .split, .t3 .clock, .t3 .compass { z-index: 2; }
 .t3 .seg.typeseg { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.t3 .vwpanel { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; background: var(--stage); }
+.t3 .vwpanel iframe { flex: 1; width: 100%; border: 0; display: block; min-height: 0; }
+.t3 .vwbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; background: var(--surface); border-top: 1px solid var(--line); }
+.t3 .vwmsg { font-size: 12px; color: var(--muted); flex: 1 1 200px; min-width: 0; }
+.t3 .vwmsg.bad { color: #b45309; }
+.t3 #t3vwAuto[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .tabs button { padding: 7px 16px; }
 /* ---------- 3D 일조 비교 ---------- */
 .t3 @media (prefers-color-scheme: dark) {
@@ -401,10 +407,24 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
         <button id="t3camEye" aria-pressed="false">보행자</button>
       </div>
       <span class="spacer"></span>
+      <button class="btn" id="t3vwOpen" hidden>브이월드 실사로 보기</button>
       <button class="btn primary" id="t3playBtn">하루 재생</button>
     </div>
     <div class="stage" id="t3stage">
       <img class="ovimg" id="t3overlay" alt="" hidden>
+      <div class="vwpanel" id="t3vwPanel" hidden>
+        <iframe id="t3vwFrame" title="브이월드 실사 3D"></iframe>
+        <div class="vwbar">
+          <div class="seg" role="group" aria-label="실사 화면 유리">
+            <button id="t3vwA" aria-pressed="true">유리 A</button>
+            <button id="t3vwB" aria-pressed="false">유리 B</button>
+          </div>
+          <button class="btn" id="t3vwAuto" aria-pressed="false">번갈아 보기</button>
+          <span class="vwmsg" id="t3vwMsg">브이월드 실사를 여는 중…</span>
+          <span class="spacer"></span>
+          <button class="btn" id="t3vwClose">실사 닫기</button>
+        </div>
+      </div>
       <div class="loading" id="t3loading">3D 엔진을 불러오는 중…</div>
       <div class="chip a" id="t3chipA"><i></i><span></span></div>
       <div class="chip b" id="t3chipB"><i></i><span></span></div>
@@ -1663,6 +1683,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
 <script>
 
 (() => {
@@ -2395,6 +2416,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     const pill = $('sFront'); pill.classList.toggle('lit', lit);
     pill.textContent = over ? '흐림 (직사광 없음)' : lit ? `직사광 받음 (입사각 ${(Math.acos(Math.min(1, fn.dot(d))) / RAD).toFixed(0)}°)` : alt > 0 ? '그늘 (해가 반대쪽)' : '해가 진 시간';
     $('clock').textContent = `${dt.getMonth() + 1}월 ${dt.getDate()}일 ${hm(mins)} · 고도 ${alt.toFixed(0)}°`;
+    if (vwOpen) vwTimeSoon();
   }
   $('time').oninput = () => updateSun();
   $('time').onchange = () => updateSun(true);
@@ -2747,9 +2769,86 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   $('ctxV').onclick = () => setCtxMode('virtual');
   $('ctxR').onclick = () => setCtxMode('real');
 
+  /* ---------- 브이월드 실사 3D 안에 건물 세우기 ---------- */
+  var vwOpen = false, vwReady = false, vwWhich = 'A', vwAutoT = 0, vwModelT = 0, vwTimeT = 0, vwFrameSrc = '';
+  const vwFrame = () => $('vwFrame').contentWindow;
+  const vwMsg = (t, bad) => { const m = $('vwMsg'); m.textContent = t; m.classList.toggle('bad', !!bad); };
+  // 건물을 glb로: 인스턴스(멀리언 등)는 한 덩어리로 풀어서, 유리는 A 또는 B 재질로
+  function exportGLB(key) {
+    const root = new THREE.Group(); root.rotation.y = bld.rotation.y;
+    const tmpM = new THREE.Matrix4();
+    bld.children.forEach(o => {
+      if (!o.isMesh) return;
+      const mat = glassMeshes.includes(o) ? mats[key] : o.material;
+      if (o.isInstancedMesh) {
+        const base = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+        const per = base.attributes.position.count, pos = new Float32Array(per * 3 * o.count), nor = new Float32Array(per * 3 * o.count);
+        for (let i = 0; i < o.count; i++) {
+          o.getMatrixAt(i, tmpM);
+          const g = base.clone(); g.applyMatrix4(tmpM);
+          pos.set(g.attributes.position.array, i * per * 3); nor.set(g.attributes.normal.array, i * per * 3);
+          g.dispose();
+        }
+        const mg = new THREE.BufferGeometry();
+        mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+        root.add(new THREE.Mesh(mg, mat));
+      } else {
+        const m = new THREE.Mesh(o.geometry, mat);
+        m.position.copy(o.position); m.quaternion.copy(o.quaternion); m.scale.copy(o.scale);
+        root.add(m);
+      }
+    });
+    return new Promise((res, rej) => {
+      try { new THREE.GLTFExporter().parse(root, r => res(r), { binary: true }); } catch (e) { rej(e); }
+    });
+  }
+  function vwPushModel() {
+    if (!vwOpen || !vwReady) return;
+    vwMsg('건물을 실사 화면으로 보내는 중…');
+    Promise.all([exportGLB('A'), exportGLB('B')]).then(([a, b]) => {
+      vwFrame().postMessage({ type: 'place', A: a, B: b, lat: LAT, lng: LON, show: vwWhich }, '*', [a, b]);
+    }).catch(e => vwMsg('건물을 보내지 못했습니다: ' + e.message, true));
+  }
+  function vwModelSoon() { if (!vwOpen) return; clearTimeout(vwModelT); vwModelT = setTimeout(vwPushModel, 700); }
+  function vwTimeSoon() {
+    if (!vwReady) return;
+    clearTimeout(vwTimeT);
+    vwTimeT = setTimeout(() => {
+      const [y, mo, d] = dateIn.value.split('-').map(Number), mins = val('time');
+      vwFrame().postMessage({ type: 'time', ms: Date.UTC(y, mo - 1, d, 0, mins) - 9 * 3600e3 }, '*');
+    }, 150);
+  }
+  function vwFly() { if (vwReady) vwFrame().postMessage({ type: 'fly', lat: LAT, lng: LON, H: dims.H, A: val('orient') }, '*'); }
+  function vwShow(k) {
+    vwWhich = k;
+    $('vwA').setAttribute('aria-pressed', k === 'A'); $('vwB').setAttribute('aria-pressed', k === 'B');
+    if (vwReady) vwFrame().postMessage({ type: 'show', which: k }, '*');
+  }
+  window.addEventListener('message', e => {
+    if (e.source !== $('vwFrame').contentWindow || !e.data) return;
+    if (e.data.type === 'vw-ready') { vwReady = true; vwMsg('실사 화면 준비됨'); vwPushModel(); vwTimeSoon(); vwFly(); }
+    else if (e.data.type === 'vw-status') vwMsg(e.data.text, e.data.bad);
+  });
+  $('vwOpen').hidden = !onSite;
+  $('vwOpen').onclick = () => {
+    vwOpen = true; $('vwPanel').hidden = false;
+    const src = `vw3d.html?lat=${LAT}&lng=${LON}`;
+    if (src !== vwFrameSrc && !vwReady) { vwFrameSrc = src; $('vwFrame').src = src; vwMsg('브이월드 실사를 여는 중… (처음엔 10초쯤 걸립니다)'); }
+    else { vwPushModel(); vwTimeSoon(); vwFly(); }
+  };
+  $('vwClose').onclick = () => { vwOpen = false; $('vwPanel').hidden = true; clearInterval(vwAutoT); vwAutoT = 0; $('vwAuto').setAttribute('aria-pressed', 'false'); };
+  $('vwA').onclick = () => vwShow('A'); $('vwB').onclick = () => vwShow('B');
+  $('vwAuto').onclick = () => {
+    if (vwAutoT) { clearInterval(vwAutoT); vwAutoT = 0; $('vwAuto').setAttribute('aria-pressed', 'false'); return; }
+    $('vwAuto').setAttribute('aria-pressed', 'true');
+    vwAutoT = setInterval(() => vwShow(vwWhich === 'A' ? 'B' : 'A'), 1800);
+  };
+  document.addEventListener('bld-change', vwModelSoon);
+  document.addEventListener('glass-pick', vwModelSoon);
+
   // 현장 위치(네이버 지도 연동에서 사용)
   window.glass3d = {
-    setSite(lat, lng, label) { LAT = lat; LON = lng; $('siteName').textContent = label; updateSun(true); loadReal(lat, lng); },
+    setSite(lat, lng, label) { LAT = lat; LON = lng; $('siteName').textContent = label; updateSun(true); loadReal(lat, lng); if (vwOpen) { vwModelSoon(); vwFly(); } },
     footprint() { return { W: dims.W, D: dims.D, orient: val('orient'), pts: btype === 'real' && realTarget ? realTarget.pts : null }; },
     isReal() { return btype === 'real'; },
     setOrient(a) { const el = $('orient'); el.value = Math.round(((a % 360) + 360) % 360 / 5) * 5 % 360; el.oninput({ target: el }); },
