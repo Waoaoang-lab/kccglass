@@ -2020,9 +2020,9 @@ setTimeout(runAnalysis, 60);
     try {
       S.site.addr = d.addr || S.site.addr;
       S.site.lat = Math.round(d.lat * 1e6) / 1e6; S.site.lon = Math.round(d.lon * 1e6) / 1e6;
-      Object.assign(S.bld, { shape: 'poly', polyText: d.poly.map(p => p[0] + ', ' + p[1]).join('\n'), rot: 0, ox: 0, oy: 0, floors: d.floors, fh: d.fh, gfa: 0, glassZ0: 0 });
+      Object.assign(S.bld, { shape: 'poly', polyText: d.poly.map(p => p[0] + ', ' + p[1]).join('\n'), rot: 0, ox: 0, oy: 0, floors: d.floors, fh: d.fh, gfa: 0, glassZ0: d.glassZ0 || 0 });
       S.glasses = d.glasses.concat(S.glasses.filter(g => !/^kcc/.test(g.id)));
-      S.defGlass = d.defGlass; S.defWwr = d.wwr; S.fac = [];
+      S.defGlass = d.defGlass; S.defWwr = d.wwr; S.fac = d.fac && d.fac.length === d.poly.length ? d.fac.map(f => ({ wwr: f.wwr, glass: f.glass })) : [];
       if (d.vwKey) S.vw.key = d.vwKey;
       if (d.vwDomain) S.vw.domain = d.vwDomain;
       S.vw.fh = 3.4;
