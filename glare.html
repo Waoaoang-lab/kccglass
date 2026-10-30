@@ -1266,7 +1266,7 @@ function build3D(forceLight) {
   fp.forEach((A, i) => {
     const B = fp[(i + 1) % fp.length], f = S.fac[i], gR = glassById(f.glass).R;
     const op = 0.55 + Math.min(0.4, gR / 100);
-    if ((S.bld.style || 'cw') !== 'cw' && window.drawWindows) { window.drawWindows(A, B, f, H, C(p.glass), op, C(p.nb)); return; }
+    if ((S.bld.style || 'cw') !== 'cw' && window.drawWindows) { window.drawWindows(A, B, f, H, C(p.glass), op, C(p.nb), i); return; }
     const m = new THREE.Mesh(prismGeo([A, B], z0, H), new THREE.MeshLambertMaterial({ color: C(p.glass), transparent: true, opacity: op, side: THREE.DoubleSide }));
     // prismGeo([A,B]) 는 A→B, B→A 두 벽을 만들므로 첫 벽만 사용
     const pos = m.geometry.getAttribute('position'); m.geometry.setDrawRange(0, 6); pos.needsUpdate = true;
@@ -2028,27 +2028,32 @@ function renderStyleUI() {
     : `${st === 'band' ? '연창은 층마다 가로로 이어진 유리 띠' : '펀치창은 벽에 뚫린 창'}로 그립니다. 정면(가장 긴 면)과 배면, 옆면 비율을 따로 정할 수 있고, 아래 입면 표에서 면마다 고칠 수도 있습니다.`;
 }
 function applyStyle() {
+  S.bld.winRects = null;
   const st = S.bld.style || 'cw', fw = +S.bld.frontWwr, sw = st === 'cw' ? fw : +S.bld.sideWwr;
   syncFac();
   const isF = frontFlags();
   S.fac.forEach((f, i) => { f.wwr = isF[i] ? fw : sw; });
   renderStyleUI(); renderFacTbl(); afterGlass();
 }
-function drawWindows(A, B, f, H, glassCol, op, wallCol) {
+// 메인 프로그램에서 받은 창 배치가 지금 형상과 맞는지 (형상·층·층고가 바뀌면 근사 배치로 그림)
+function winSig() { return JSON.stringify([S.bld.polyText, S.bld.shape, S.bld.floors, S.bld.fh, S.bld.rot]); }
+function drawWindows(A, B, f, H, glassCol, op, wallCol, fi) {
   const wall = new THREE.Mesh(prismGeo([A, B], 0, H), new THREE.MeshLambertMaterial({ color: wallCol, side: THREE.DoubleSide }));
   wall.geometry.setDrawRange(0, 6); R3.stat.add(wall);
   const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy); if (L < 0.5) return;
-  const t = [dx / L, dy / L], n = [t[1], -t[0]], r = Math.max(0, Math.min(1, f.wwr / 100)); if (!r) return;
+  const t = [dx / L, dy / L], n = [t[1], -t[0]], r = Math.max(0, Math.min(1, f.wwr / 100)); if (!r && !(S.bld.winRects && S.bld.winRects[fi] && S.bld.winRects[fi].length)) return;
   const fh = +S.bld.fh, F = Math.round(H / fh), pos = [];
   const P = (u, z) => T3(A[0] + t[0] * u + n[0] * 0.12, A[1] + t[1] * u + n[1] * 0.12, z);
   const quad = (u0, u1, za, zb) => { const a = P(u0, za), b = P(u1, za), c = P(u1, zb), d = P(u0, zb); pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z); };
-  for (let k = 0; k < F; k++) {
+  const exact = S.bld.winRects && S.bld.winSig === winSig() && S.bld.winRects[fi];
+  if (exact) exact.forEach(q => quad(q[0], q[1], q[2], q[3]));
+  else for (let k = 0; k < F; k++) {
     const zb = k * fh;
     if (S.bld.style === 'band') {
       const hs = Math.max(0.3, Math.min(fh - 0.2, fh * r)), s0 = Math.max(0.1, Math.min(0.9, fh - hs - 0.2));
       quad(0.3, L - 0.3, zb + s0, zb + s0 + hs);
     } else {
-      const nb = Math.max(1, Math.round(L / 3)), bay = L / nb;
+      const nb = Math.max(1, Math.round(L / (+S.bld.bay || 3))), bay = L / nb;
       let wh = Math.min(1.8, fh - 1.2), wf = r / (wh / fh);
       if (wf > 0.92) { wf = 0.92; wh = Math.min(fh - 0.4, r * fh / 0.92); }
       const s0 = Math.max(0.2, Math.min(0.9, fh - wh - 0.3));
@@ -2102,6 +2107,7 @@ function drawWindows(A, B, f, H, glassCol, op, wallCol) {
       // 이전 인접 건물의 반사 결과가 남아 화면을 다시 그릴 때 오류가 나지 않도록 먼저 비움
       S.nb = d.nb ? d.nb.map((n, i) => ({ id: 'x' + i, name: n.name, poly: n.poly, floors: n.floors, h: n.h, src: 'vworld' })) : [];
       if (d.style) { S.bld.style = d.style; S.bld.frontWwr = d.frontWwr; S.bld.sideWwr = d.sideWwr; }
+      S.bld.bay = d.bay || 3; S.bld.winRects = d.winRects || null; S.bld.winSig = winSig();
       RES = null; STALE = true; syncFac(); boot(true);
       if (d.features && d.features.length) { S.vw.radius = 99999; importFeatures(d.features); }
       S.vw.radius = d.radius || 300; refreshInputs();

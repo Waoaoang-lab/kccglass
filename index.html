@@ -626,7 +626,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       <div class="gllist" id="t3glTable"></div>
       <button class="btn" id="t3glCopy" type="button" hidden>결과 표 복사</button>
       <button class="btn" id="t3glDeep" type="button" hidden>정밀 분석·검토서로 열기</button>
-      <p class="note">검토 우선순위 기준: 높음은 연간 30일 이상(반사율 15% 이상) 또는 30시간 이상, 보통은 10일 또는 8시간 이상입니다. 2021년 대법원(해운대 아이파크) 판결에서 피해 세대의 강한 반사광 일수는 연 31~187일이었습니다. 국내에는 반사율 수치 기준이 아직 없습니다. 이 결과는 설계 초기 검토용 추정이며, 공식 빛반사 영향평가를 대신하지 않습니다.</p>
+      <p class="note">반사하는 유리 면적이 1㎡ 미만인 순간은 세지 않아서, 창이 작을수록 영향이 작게 나옵니다. 검토 우선순위 기준: 높음은 연간 30일 이상(반사율 15% 이상) 또는 30시간 이상, 보통은 10일 또는 8시간 이상입니다. 2021년 대법원(해운대 아이파크) 판결에서 피해 세대의 강한 반사광 일수는 연 31~187일이었습니다. 국내에는 반사율 수치 기준이 아직 없습니다. 이 결과는 설계 초기 검토용 추정이며, 공식 빛반사 영향평가를 대신하지 않습니다.</p>
     </div>
 
     <div class="card">
@@ -3155,22 +3155,22 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     const planes = [], insts = [], out = [];
     glassMeshes.forEach(m => { if (!m) return; (m.isInstancedMesh ? insts : planes).push(m); });
     let area = 0; planes.forEach(m => { area += m.geometry.parameters.width * m.geometry.parameters.height; });
-    const sp = Math.max(2, Math.sqrt(area / 800)), p = new THREE.Vector3(), n = new THREE.Vector3(), M = new THREE.Matrix4();
+    const sp = Math.max(2, Math.sqrt(area / 800)), p = new THREE.Vector3(), n = new THREE.Vector3(), M = new THREE.Matrix4(), Qs = new THREE.Quaternion(), Ss = new THREE.Vector3();
     planes.forEach(m => {
       const W = m.geometry.parameters.width, H = m.geometry.parameters.height;
       const nu = Math.max(1, Math.round(W / sp)), nv = Math.max(1, Math.round(H / sp));
       n.set(0, 0, 1).transformDirection(m.matrixWorld);
       for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
         p.set(((i + 0.5) / nu - 0.5) * W, ((j + 0.5) / nv - 0.5) * H, 0).applyMatrix4(m.matrixWorld);
-        out.push({ p: [p.x, p.y, p.z], n: [n.x, n.y, n.z] });
+        out.push({ p: [p.x, p.y, p.z], n: [n.x, n.y, n.z], w: (W / nu) * (H / nv) }); // w: 이 표본이 대표하는 유리 면적(㎡)
       }
     });
     const total = insts.reduce((a, m) => a + m.count, 0), stride = Math.max(1, Math.ceil(total / 800));
     insts.forEach(m => {
       for (let i = 0; i < m.count; i += stride) {
-        m.getMatrixAt(i, M); M.premultiply(m.matrixWorld);
-        p.set(0, 0, 0).applyMatrix4(M); n.set(0, 0, 1).transformDirection(M);
-        out.push({ p: [p.x, p.y, p.z], n: [n.x, n.y, n.z] });
+        m.getMatrixAt(i, M); M.premultiply(m.matrixWorld); M.decompose(p, Qs, Ss);
+        n.set(0, 0, 1).applyQuaternion(Qs);
+        out.push({ p: [p.x, p.y, p.z], n: [n.x, n.y, n.z], w: Ss.x * Ss.y * stride }); // 창 면적 × 건너뛴 창 수
       }
     });
     return (glSampleCache = out);
@@ -3191,6 +3191,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 
   // 실사 화면(브이월드)에서 지형 높이 받기: 현장 지반고 대비 각 건물 지반고 차이
   var glElev = null, elevReq = 0;
+  const GL_MIN_AREA = 1; // ㎡: 이보다 작은 유리 면적의 반사는 세지 않음
   function glFetchElev(list) {
     if (!vwReady || !vwOpen || !list || !list.length) return Promise.resolve(null);
     const id = ++elevReq, pts = list.map(b => [LAT - b.cz / 111320, LON + b.cx / (111320 * Math.cos(LAT * RAD))]);
@@ -3240,21 +3241,30 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
         const { alt, az } = sunAt(dt, mins);
         if (alt < 3) continue;
         const sv = sunVec(alt, az), res = GlareEngine.step(samples, [sv.x, sv.y, sv.z], prisms, R0, 700);
-        const seen = new Set();
+        // 같은 면에 닿는 반사를 모아, 반사하는 유리 면적이 기준(1㎡) 이상일 때만 그 시각을 셈 → 큰 창은 크게, 작은 창은 작게 반영
+        const per = new Map();
         for (const r of res) {
           const h = r.hit, key = h.kind === 'ground' ? 'G' : h.b.id + '|' + (h.kind === 'roof' ? 'R' : h.edge);
+          let e = per.get(key); if (!e) per.set(key, e = { a: 0, fa: new Map(), list: [] });
+          const w = samples[r.si].w || 1; e.a += w; e.list.push(r);
+          if (h.kind === 'wall') { const fl = Math.min(h.b.floors, Math.max(1, Math.floor((h.y - h.b.z0) / h.b.flh) + 1)); e.fa.set(fl, (e.fa.get(fl) || 0) + w); }
+        }
+        for (const [key, e] of per) {
+          if (e.a < GL_MIN_AREA) continue;
+          const h0 = e.list[0].hit;
           let g = groups.get(key);
-          if (!g) groups.set(key, g = { key, hit: h, floors: new Map(), days: new Set(), months: new Set(), tmin: 1e9, tmax: -1, minutes: 0, maxR: 0, maxInc: 0, pts: [], src: new Map(), hy: [1e9, -1] });
-          if (!seen.has(key)) { seen.add(key); g.minutes += stepMin; g.days.add(di); g.months.add(dt.getMonth() + 1); g.tmin = Math.min(g.tmin, mins); g.tmax = Math.max(g.tmax, mins); }
-          if (h.kind === 'wall') {
-            const fl = Math.min(h.b.floors, Math.max(1, Math.floor((h.y - h.b.z0) / h.b.flh) + 1)), fk = key + '|' + fl;
-            if (!seen.has(fk)) { seen.add(fk); g.floors.set(fl, (g.floors.get(fl) || 0) + stepMin); }
-          }
+          if (!g) groups.set(key, g = { key, hit: h0, floors: new Map(), days: new Set(), months: new Set(), tmin: 1e9, tmax: -1, minutes: 0, maxR: 0, maxInc: 0, maxArea: 0, pts: [], src: new Map(), hy: [1e9, -1] });
+          g.minutes += stepMin; g.days.add(di); g.months.add(dt.getMonth() + 1); g.tmin = Math.min(g.tmin, mins); g.tmax = Math.max(g.tmax, mins);
+          g.maxArea = Math.max(g.maxArea, e.a);
+          for (const [fl, a] of e.fa) if (a >= GL_MIN_AREA / 2) g.floors.set(fl, (g.floors.get(fl) || 0) + stepMin);
+          for (const r of e.list) {
+          const h = r.hit;
           if (r.R > g.maxR) { g.maxR = r.R; g.maxInc = r.inc; }
           if (g.pts.length < 500) g.pts.push([h.p[0] - r.r[0] * 0.4, h.p[1] - r.r[1] * 0.4, h.p[2] - r.r[2] * 0.4, r.R]);
           const s = samples[r.si], sk = dirName(azOf(s.n[0], s.n[2]));
           g.src.set(sk, (g.src.get(sk) || 0) + 1);
           g.hy[0] = Math.min(g.hy[0], s.p[1]); g.hy[1] = Math.max(g.hy[1], s.p[1]);
+          }
         }
       }
       $('glProg').firstElementChild.style.width = ((di + 1) / days.length * 100) + '%';
@@ -3282,9 +3292,9 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       return { g, lvl, title, face, estDays, hours,
         when: `${year ? monthsText(g.months) + ' · ' : ''}${hm(g.tmin)}~${hm(g.tmax + stepMin)}`,
         amount: year ? `연간 약 ${estDays}일 · ${hours < 1 ? '1시간 미만' : Math.round(hours) + '시간'}` : `이날 ${g.minutes}분`,
-        refl: `반사율 최대 ${Math.round(g.maxR * 100)}% (입사각 ${Math.round(g.maxInc)}°)`,
+        refl: `반사율 최대 ${Math.round(g.maxR * 100)}% (입사각 ${Math.round(g.maxInc)}°) · 반사 유리 면적 최대 약 ${Math.round(g.maxArea)}㎡`,
         src: `원인: 우리 건물 ${src}면 ${Math.round(g.hy[0])}~${Math.round(g.hy[1])}m 높이`,
-        score: { h: 3, m: 2, l: 1 }[lvl] * 1e6 + (year ? estDays * 1000 : 0) + g.minutes };
+        score: { h: 3, m: 2, l: 1 }[lvl] * 1e6 + (year ? estDays * 1000 : 0) + g.minutes + Math.min(999, g.maxArea) / 1000 };
     }).sort((a, b) => b.score - a.score);
     glRender(year, ((performance.now() - t0) / 1000).toFixed(1));
     btn.disabled = false; $('glProg').hidden = true;
@@ -3432,12 +3442,12 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
         for (let i = 0; i < m.count; i++) {
           m.getMatrixAt(i, M); M.premultiply(m.matrixWorld); M.decompose(pos, q, sc);
           n.set(0, 0, 1).applyQuaternion(q);
-          els.push({ a: sc.x * sc.y, n: [n.x, -n.z], bot: pos.y - sc.y / 2 });
+          els.push({ a: sc.x * sc.y, n: [n.x, -n.z], bot: pos.y - sc.y / 2, top: pos.y + sc.y / 2, c: [pos.x, -pos.z], w: sc.x });
         }
       } else {
         m.matrixWorld.decompose(pos, q, sc); n.set(0, 0, 1).applyQuaternion(q);
         const W = m.geometry.parameters.width * sc.x, Hh = m.geometry.parameters.height * sc.y;
-        els.push({ a: W * Hh, n: [n.x, -n.z], bot: pos.y - Hh / 2 });
+        els.push({ a: W * Hh, n: [n.x, -n.z], bot: pos.y - Hh / 2, top: pos.y + Hh / 2, c: [pos.x, -pos.z], w: W });
       }
     });
     const total = els.reduce((s, e) => s + e.a, 0);
@@ -3445,15 +3455,24 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       const P = footprintEN(); let per = 0; P.forEach((p, i) => { const q2 = P[(i + 1) % P.length]; per += Math.hypot(q2[0] - p[0], q2[1] - p[1]); });
       return { avg: Math.min(100, Math.round(total / Math.max(1, per * dims.H) * 100)) };
     }
-    const fac = poly.map((A, i) => { const B = poly[(i + 1) % poly.length], L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1; return { L, n: [(B[1] - A[1]) / L, -(B[0] - A[0]) / L], a: 0 }; });
+    const fac = poly.map((A, i) => { const B = poly[(i + 1) % poly.length], L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1; return { A, L, t: [(B[0] - A[0]) / L, (B[1] - A[1]) / L], n: [(B[1] - A[1]) / L, -(B[0] - A[0]) / L], a: 0, rects: [] }; });
     let z0 = Infinity;
     els.forEach(e => {
-      let bi = -1, bd = 0.5;
-      fac.forEach((f, i) => { const d = f.n[0] * e.n[0] + f.n[1] * e.n[1]; if (d > bd) { bd = d; bi = i; } });
-      if (bi >= 0) { fac[bi].a += e.a; z0 = Math.min(z0, e.bot); }
+      // 방향이 맞는 면 중 가장 가까운 면 (ㄱ자처럼 같은 방향 면이 여럿이어도 구분)
+      let bi = -1, bd = Infinity;
+      fac.forEach((f, i) => {
+        if (f.n[0] * e.n[0] + f.n[1] * e.n[1] < 0.5) return;
+        const u = (e.c[0] - f.A[0]) * f.t[0] + (e.c[1] - f.A[1]) * f.t[1], off = Math.abs((e.c[0] - f.A[0]) * f.n[0] + (e.c[1] - f.A[1]) * f.n[1]);
+        const d = off + Math.max(0, -u, u - f.L);
+        if (d < bd) { bd = d; bi = i; }
+      });
+      if (bi < 0) return;
+      const f = fac[bi], u = (e.c[0] - f.A[0]) * f.t[0] + (e.c[1] - f.A[1]) * f.t[1];
+      f.a += e.a; z0 = Math.min(z0, e.bot);
+      f.rects.push([Math.max(0, u - e.w / 2), Math.min(f.L, u + e.w / 2), Math.max(0, e.bot), e.top]);
     });
     z0 = isFinite(z0) ? Math.max(0, Math.min(z0, H - 1)) : 0;
-    return { z0: Math.round(z0 * 10) / 10, wwr: fac.map(f => Math.max(0, Math.min(100, Math.round(f.a / (f.L * (H - z0)) * 100)))) };
+    return { z0: Math.round(z0 * 10) / 10, wwr: fac.map(f => Math.max(0, Math.min(100, Math.round(f.a / (f.L * (H - z0)) * 100)))), rects: fac.map(f => f.rects), L: fac.map(f => f.L) };
   }
 
   /* ---------- 현휘 정밀 분석기(glare.html)로 넘길 데이터 ---------- */
@@ -3500,6 +3519,9 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       lat: LAT, lon: LON, floors, fh: fhOut, glassZ0: stats.z0,
       poly: P.map(([e, n]) => [Math.round(e * 100) / 100, Math.round(n * 100) / 100]),
       fac: stats.wwr.map(w => ({ wwr: w, glass: gsel })), style: fstyle, frontWwr: frontW, sideWwr: sideW,
+      // 창 배치 그대로 (면마다 [시작, 끝, 아래, 위] m, 분석기 좌표 길이에 맞춰 비례)
+      winRects: stats.rects.map((list, i) => { const k = facL[i].L / stats.L[i]; return list.map(r => [Math.round(r[0] * k * 100) / 100, Math.round(r[1] * k * 100) / 100, Math.round(r[2] * 100) / 100, Math.round(r[3] * 100) / 100]); }),
+      bay: btype === 'real' || btype === 'off' ? val('bw') : 3,
       glasses: [g('A'), g('B'), { id: 'kccMax', name: 'KCC MZT128 (카탈로그 최고 반사)', R: 45 }],
       defGlass: gsel,
       view: `${vwOpen ? '브이월드 실사' : '3D'} · ${$('siteName').textContent}`,
