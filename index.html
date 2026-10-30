@@ -532,6 +532,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
           <option value="punch">펀치창 (벽에 창)</option>
         </select>
       </div>
+      <div class="field" id="t3rFrontRow" hidden><span>정면 창 비율</span><input type="range" id="t3rFront" min="5" max="95" step="5" value="35"><output id="t3rFrontO">35%</output></div>
+      <div class="field" id="t3rSideRow" hidden><span>옆면 창 비율</span><input type="range" id="t3rSide" min="0" max="95" step="5" value="20"><output id="t3rSideO">20%</output></div>
       <div class="field" id="t3orientRow"><span>정면 방위</span><input type="range" id="t3orient" min="0" max="355" step="5" value="180"><output id="t3orientO">남 180°</output></div>
       <div class="namebox"><span>프레임 색</span>
         <select id="t3frame">
@@ -2404,10 +2406,15 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     else polyCore(P, H, stoneMat);
     const mull = [], bands = [], gl = [], fr = [];
     let longest = 0, frontA = 180;
+    // 정면 = 가장 긴 면. 정면·배면(정면과 45° 이내로 평행한 면)과 옆면에 창 비율을 따로 적용
+    let nfx = 0, nfz = 1, lmax = 0;
+    for (let i = 0; i < P.length; i++) { const [ax, az] = P[i], [bx2, bz2] = P[(i + 1) % P.length], L = Math.hypot(bx2 - ax, bz2 - az); if (L > lmax) { lmax = L; nfx = (S > 0 ? bz2 - az : az - bz2) / L; nfz = (S > 0 ? ax - bx2 : bx2 - ax) / L; } }
+    const rFront = val('rFront') / 100, rSide = val('rSide') / 100;
     for (let i = 0; i < P.length; i++) {
       const [ax, az] = P[i], [bx2, bz2] = P[(i + 1) % P.length], dx = bx2 - ax, dz = bz2 - az, len = Math.hypot(dx, dz);
       if (len < 1.2) continue;
       const nx = (S > 0 ? dz : -dz) / len, nz = (S > 0 ? -dx : dx) / len; // 바깥쪽
+      const ratio = Math.abs(nx * nfx + nz * nfz) >= 0.707 ? rFront : rSide;
       const Mf = faceM(Math.atan2(nx, nz), (ax + bx2) / 2, (az + bz2) / 2);
       if (len > longest) { longest = len; frontA = ((Math.atan2(nx, -nz) / RAD) + 360) % 360; }
       const n = Math.max(1, Math.round(len / bw));
@@ -2416,16 +2423,22 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
         for (let j = 0; j <= n; j++) mull.push(bx(Mf, -len / 2 + j * len / n, H / 2, 0.08, 0.08, H, 0.2));
         for (let k = 0; k <= F; k++) bands.push(bx(Mf, 0, k * fh, 0.05, len + 0.05, 0.22, 0.12));
       } else if (style === 'band') {
-        const hs = Math.max(0.8, fh - 1.5);
+        if (ratio <= 0) continue;
+        // 띠창: 창 높이 = 층고 × 창 비율 (가로는 끊김 없이)
+        const hs = Math.max(0.3, Math.min(fh - 0.2, fh * ratio)), s0 = Math.max(0.1, Math.min(0.9, fh - hs - 0.2));
         for (let k = 0; k < F; k++) {
-          const y = k * fh + 0.9 + hs / 2;
+          const y = k * fh + s0 + hs / 2;
           gl.push(bx(Mf, 0, y, 0.04, len - 0.6, hs, 0.03));
           for (let j = 0; j <= n; j++) fr.push(bx(Mf, -len / 2 + 0.3 + j * (len - 0.6) / n, y, 0.07, 0.06, hs, 0.03));
         }
       } else {
-        const ww = len / n * 0.55, wh = Math.min(1.8, fh - 1.2);
+        if (ratio <= 0) continue;
+        // 펀치창: 창 면적 / 벽 면적 = 창 비율 (창이 넓어지다 한계를 넘으면 높이를 키움)
+        let wh = Math.min(1.8, fh - 1.2), wf = ratio / (wh / fh);
+        if (wf > 0.92) { wf = 0.92; wh = Math.min(fh - 0.4, ratio * fh / 0.92); }
+        const ww = len / n * wf, s0 = Math.max(0.2, Math.min(0.9, fh - wh - 0.3));
         for (let k = 0; k < F; k++) for (let j = 0; j < n; j++) {
-          const x = -len / 2 + (j + 0.5) * len / n, y = k * fh + 0.9 + wh / 2;
+          const x = -len / 2 + (j + 0.5) * len / n, y = k * fh + s0 + wh / 2;
           fr.push(bx(Mf, x, y, 0.03, ww + 0.12, wh + 0.12, 0.06));
           gl.push(bx(Mf, x, y, 0.07, ww, wh, 0.02));
         }
@@ -2538,7 +2551,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     if (t !== 'proj') { $('ovOn').checked = false; showOverlay(); }
     $('typeNote').textContent = TYPES[t].note;
     SL.forEach(id => { $(id).closest('.field').hidden = !TYPES[t].s[id]; });
-    $('orientRow').hidden = t === 'real'; $('rStyleRow').hidden = t !== 'real';
+    $('orientRow').hidden = t === 'real'; $('rStyleRow').hidden = t !== 'real'; showRatioRows();
     SL.filter(id => TYPES[t].s[id]).forEach(id => {
       const [label, mn, mx, st, v] = TYPES[t].s[id], el = $(id);
       $(id + 'L').textContent = label; el.min = mn; el.max = mx; el.step = st; el.value = v; showOut(id);
@@ -2549,7 +2562,19 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     buildBuilding(); setCam(camMode);
   }
   $('tRes').onclick = () => setType('res'); $('tOff').onclick = () => setType('off'); $('tHot').onclick = () => setType('hot'); $('tProj').onclick = () => setType('proj'); $('tReal').onclick = () => setType('real');
-  $('rStyle').onchange = () => buildBuilding();
+  // 띠창·펀치창: 정면·옆면 창 비율 (형식마다 기본값)
+  const RATIO_DEF = { band: [55, 30], punch: [35, 20] };
+  function showRatioRows() {
+    const on = btype === 'real' && $('rStyle').value !== 'cw';
+    $('rFrontRow').hidden = $('rSideRow').hidden = !on;
+  }
+  $('rStyle').onchange = () => {
+    const d = RATIO_DEF[$('rStyle').value];
+    if (d) { $('rFront').value = d[0]; $('rSide').value = d[1]; $('rFrontO').value = d[0] + '%'; $('rSideO').value = d[1] + '%'; }
+    showRatioRows(); buildBuilding();
+  };
+  let rTimer = 0;
+  ['rFront', 'rSide'].forEach(id => $(id).oninput = e => { $(id + 'O').value = e.target.value + '%'; clearTimeout(rTimer); rTimer = setTimeout(buildBuilding, 60); });
   let bTimer = 0;
   SL.forEach(id => $(id).oninput = () => {
     TYPES[btype].s[id][4] = +$(id).value; showOut(id);
@@ -3268,7 +3293,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   function glBldNote() {
     const style = btype === 'real' ? { cw: '전면 커튼월', band: '띠창', punch: '펀치창' }[$('rStyle').value] : { off: '전면 커튼월', res: '아파트 세대창', hot: '호텔 커튼월·포디움', proj: '프로젝트 커튼월' }[btype];
     const st = glGlassStats();
-    return `우리 건물: ${style} · ${val('floors')}층 × 층고 ${val('fh')}m · 높이 ${dims.H.toFixed(1)}m · 유리 비율 약 ${st.avg}%`;
+    const rr = btype === 'real' && $('rStyle').value !== 'cw' ? ` (정면 ${val('rFront')}% · 옆면 ${val('rSide')}%)` : '';
+    return `우리 건물: ${style}${rr} · ${val('floors')}층 × 층고 ${val('fh')}m · 높이 ${dims.H.toFixed(1)}m · 유리 비율 약 ${st.avg}%`;
   }
   function glLvl(year, estDays, hours, minutes, maxR) {
     if (year) return (estDays >= 30 && maxR >= 0.15) || hours >= 30 ? 'h' : estDays >= 10 || hours >= 8 ? 'm' : 'l';
@@ -3450,6 +3476,13 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     if (ar < 0) P = P.slice().reverse();
     const stats = glGlassStats(P.map(([e, n]) => [e, n / KY]), H);
     const gsel = $('glGlass').value === 'max' ? 'kccMax' : $('glGlass').value === 'B' ? 'kccB' : 'kccA';
+    // 입면 형식과 정면·옆면 유리 비율 (실측값을 길이로 가중 평균)
+    const fstyle = btype === 'real' ? $('rStyle').value : btype === 'res' ? 'punch' : 'cw';
+    const facL = P.map((A, i) => { const B = P[(i + 1) % P.length], L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1; return { L, n: [(B[1] - A[1]) / L, -(B[0] - A[0]) / L] }; });
+    const fi = facL.reduce((m, f, i) => f.L > facL[m].L ? i : m, 0);
+    const grp = [[0, 0], [0, 0]];
+    facL.forEach((f, i) => { const k = Math.abs(f.n[0] * facL[fi].n[0] + f.n[1] * facL[fi].n[1]) >= 0.707 ? 0 : 1; grp[k][0] += stats.wwr[i] * f.L; grp[k][1] += f.L; });
+    const frontW = Math.round(grp[0][0] / Math.max(1, grp[0][1])), sideW = grp[1][1] ? Math.round(grp[1][0] / grp[1][1]) : frontW;
     const g = k => ({ id: 'kcc' + k, name: `KCC ${glass[k].key} (유리 ${k})`, R: glass[k].lro });
     // 주변 건물: 실제 주변이면 위·경도 윤곽 그대로(분석기가 직접 변환), 가상 주변이면 m 좌표
     let feats = null, nb = null;
@@ -3466,7 +3499,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       addr: document.getElementById('siteQ') ? document.getElementById('siteQ').value.trim() : '',
       lat: LAT, lon: LON, floors, fh: fhOut, glassZ0: stats.z0,
       poly: P.map(([e, n]) => [Math.round(e * 100) / 100, Math.round(n * 100) / 100]),
-      fac: stats.wwr.map(w => ({ wwr: w, glass: gsel })),
+      fac: stats.wwr.map(w => ({ wwr: w, glass: gsel })), style: fstyle, frontWwr: frontW, sideWwr: sideW,
       glasses: [g('A'), g('B'), { id: 'kccMax', name: 'KCC MZT128 (카탈로그 최고 반사)', R: 45 }],
       defGlass: gsel,
       view: `${vwOpen ? '브이월드 실사' : '3D'} · ${$('siteName').textContent}`,

@@ -223,6 +223,13 @@ table.res tbody tr:hover td{background:var(--sunk)}
         <label class="f"><span>층고 (m)</span><input type="number" step="0.1" id="fh" data-k="bld.fh"></label>
         <label class="f"><span>연면적 (㎡)</span><input type="number" id="gfa" data-k="bld.gfa"></label>
       </div>
+      <div class="g3">
+        <label class="f"><span>입면 형식</span>
+          <select id="bStyle" aria-label="입면 형식"><option value="cw">전면 커튼월</option><option value="band">연창 (띠창)</option><option value="punch">펀치창</option></select></label>
+        <label class="f"><span id="bFrontLbl">유리 비율 %</span><input type="number" min="0" max="100" step="5" id="bFrontW"></label>
+        <label class="f" id="bSideWrap"><span>옆면 유리 비율 %</span><input type="number" min="0" max="100" step="5" id="bSideW"></label>
+      </div>
+      <p class="hint" id="bStyleHint"></p>
 
       <div data-ipanel="dim" class="stepbody" style="padding:0">
         <label class="f"><span>평면 형태</span>
@@ -1259,6 +1266,7 @@ function build3D(forceLight) {
   fp.forEach((A, i) => {
     const B = fp[(i + 1) % fp.length], f = S.fac[i], gR = glassById(f.glass).R;
     const op = 0.55 + Math.min(0.4, gR / 100);
+    if ((S.bld.style || 'cw') !== 'cw' && window.drawWindows) { window.drawWindows(A, B, f, H, C(p.glass), op, C(p.nb)); return; }
     const m = new THREE.Mesh(prismGeo([A, B], z0, H), new THREE.MeshLambertMaterial({ color: C(p.glass), transparent: true, opacity: op, side: THREE.DoubleSide }));
     // prismGeo([A,B]) 는 A→B, B→A 두 벽을 만들므로 첫 벽만 사용
     const pos = m.geometry.getAttribute('position'); m.geometry.setDrawRange(0, 6); pos.needsUpdate = true;
@@ -2001,6 +2009,70 @@ setTimeout(runAnalysis, 60);
 </script>
 
 <script>
+/* ===== 입면 형식 (전면 커튼월 / 연창 / 펀치창) =====
+   유리 비율은 반사 면적 계산에 쓰이고(다시 계산 없이 바로 반영), 3D 화면은 형식대로 창을 그림.
+   정면 = 가장 긴 입면. 정면과 45° 이내로 평행한 면(정면·배면)과 나머지(옆면)에 비율을 따로 적용 */
+const STYLE_DEF = { cw: [90, 90], band: [55, 30], punch: [35, 20] };
+function frontFlags() {
+  const fg = facadeGeo(); let L = 0, nf = [0, 1];
+  fg.forEach(f => { if (f.L > L) { L = f.L; nf = f.n; } });
+  return fg.map(f => Math.abs(f.n[0] * nf[0] + f.n[1] * nf[1]) >= 0.707);
+}
+function renderStyleUI() {
+  const st = S.bld.style || 'cw';
+  $('bStyle').value = st;
+  $('bFrontLbl').textContent = st === 'cw' ? '유리 비율 %' : '정면·배면 유리 비율 %';
+  $('bSideWrap').hidden = st === 'cw';
+  $('bFrontW').value = S.bld.frontWwr ?? S.defWwr; $('bSideW').value = S.bld.sideWwr ?? S.defWwr;
+  $('bStyleHint').textContent = st === 'cw' ? '모든 입면에 같은 유리 비율을 씁니다.'
+    : `${st === 'band' ? '연창은 층마다 가로로 이어진 유리 띠' : '펀치창은 벽에 뚫린 창'}로 그립니다. 정면(가장 긴 면)과 배면, 옆면 비율을 따로 정할 수 있고, 아래 입면 표에서 면마다 고칠 수도 있습니다.`;
+}
+function applyStyle() {
+  const st = S.bld.style || 'cw', fw = +S.bld.frontWwr, sw = st === 'cw' ? fw : +S.bld.sideWwr;
+  syncFac();
+  const isF = frontFlags();
+  S.fac.forEach((f, i) => { f.wwr = isF[i] ? fw : sw; });
+  renderStyleUI(); renderFacTbl(); afterGlass();
+}
+function drawWindows(A, B, f, H, glassCol, op, wallCol) {
+  const wall = new THREE.Mesh(prismGeo([A, B], 0, H), new THREE.MeshLambertMaterial({ color: wallCol, side: THREE.DoubleSide }));
+  wall.geometry.setDrawRange(0, 6); R3.stat.add(wall);
+  const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy); if (L < 0.5) return;
+  const t = [dx / L, dy / L], n = [t[1], -t[0]], r = Math.max(0, Math.min(1, f.wwr / 100)); if (!r) return;
+  const fh = +S.bld.fh, F = Math.round(H / fh), pos = [];
+  const P = (u, z) => T3(A[0] + t[0] * u + n[0] * 0.12, A[1] + t[1] * u + n[1] * 0.12, z);
+  const quad = (u0, u1, za, zb) => { const a = P(u0, za), b = P(u1, za), c = P(u1, zb), d = P(u0, zb); pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z); };
+  for (let k = 0; k < F; k++) {
+    const zb = k * fh;
+    if (S.bld.style === 'band') {
+      const hs = Math.max(0.3, Math.min(fh - 0.2, fh * r)), s0 = Math.max(0.1, Math.min(0.9, fh - hs - 0.2));
+      quad(0.3, L - 0.3, zb + s0, zb + s0 + hs);
+    } else {
+      const nb = Math.max(1, Math.round(L / 3)), bay = L / nb;
+      let wh = Math.min(1.8, fh - 1.2), wf = r / (wh / fh);
+      if (wf > 0.92) { wf = 0.92; wh = Math.min(fh - 0.4, r * fh / 0.92); }
+      const s0 = Math.max(0.2, Math.min(0.9, fh - wh - 0.3));
+      for (let j = 0; j < nb; j++) { const uc = (j + 0.5) * bay, w = bay * wf; quad(uc - w / 2, uc + w / 2, zb + s0, zb + s0 + wh); }
+    }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  R3.stat.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: glassCol, transparent: true, opacity: Math.min(0.95, op + 0.2), side: THREE.DoubleSide })));
+}
+// 인접 건물이 바뀌면 이전 시각의 반사 결과(NOW)를 먼저 지움 → 화면을 다시 그릴 때 사라진 벽을 찾다 나던 오류 방지
+{ const _rebuildViz = rebuildViz; rebuildViz = function () { NOW = null; _rebuildViz(); }; }
+(() => {
+  if (!S.bld.style) { S.bld.style = 'cw'; S.bld.frontWwr = S.defWwr; S.bld.sideWwr = S.defWwr; }
+  $('bStyle').onchange = e => {
+    S.bld.style = e.target.value; const d = STYLE_DEF[S.bld.style];
+    S.bld.frontWwr = d[0]; S.bld.sideWwr = d[1];
+    applyStyle(); toast({ cw: '전면 커튼월', band: '연창(띠창)', punch: '펀치창' }[S.bld.style] + ' · 정면 ' + d[0] + '%' + (S.bld.style === 'cw' ? '' : ' · 옆면 ' + d[1] + '%') + '로 바꿨습니다.');
+  };
+  $('bFrontW').onchange = e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return; S.bld.frontWwr = Math.max(0, Math.min(100, v)); applyStyle(); };
+  $('bSideW').onchange = e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return; S.bld.sideWwr = Math.max(0, Math.min(100, v)); applyStyle(); };
+  renderStyleUI(); build3D();
+})();
+</script>
+<script>
 /* ===== 유리 색상 비교기(index.html) 연결 =====
    같은 사이트의 메인 프로그램 안에서 열리면, 3D 탭의 현장·건물·유리·주변 건물을 받아 채우고 바로 분석함.
    이 파일만 따로 열면 아무 일도 하지 않음 */
@@ -2027,11 +2099,13 @@ setTimeout(runAnalysis, 60);
       if (d.vwDomain) S.vw.domain = d.vwDomain;
       S.vw.fh = 3.4;
       if (d.proj) $('projName').value = d.proj;
-      if (d.nb) S.nb = d.nb.map((n, i) => ({ id: 'x' + i, name: n.name, poly: n.poly, floors: n.floors, h: n.h, src: 'vworld' }));
+      // 이전 인접 건물의 반사 결과가 남아 화면을 다시 그릴 때 오류가 나지 않도록 먼저 비움
+      S.nb = d.nb ? d.nb.map((n, i) => ({ id: 'x' + i, name: n.name, poly: n.poly, floors: n.floors, h: n.h, src: 'vworld' })) : [];
+      if (d.style) { S.bld.style = d.style; S.bld.frontWwr = d.frontWwr; S.bld.sideWwr = d.sideWwr; }
       RES = null; STALE = true; syncFac(); boot(true);
       if (d.features && d.features.length) { S.vw.radius = 99999; importFeatures(d.features); }
       S.vw.radius = d.radius || 300; refreshInputs();
-      save(); renderSummaries();
+      save(); renderSummaries(); if (window.renderStyleUI) renderStyleUI();
       const run = () => RUNNING ? setTimeout(run, 200) : runAnalysis();
       setTimeout(run, 100);
       window.parent.postMessage({ type: 'glare-msg', text: `분석기에 넘겼습니다: ${d.proj} · ${d.floors}층 · 주변 ${S.nb.length}동 · 기본 유리 ${glassById(S.defGlass).name} ${glassById(S.defGlass).R}% · 분석을 실행합니다.` }, '*');
