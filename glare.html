@@ -2008,7 +2008,15 @@ setTimeout(runAnalysis, 60);
   if (window.parent === window) return;
   window.addEventListener('message', e => {
     const d = e.data;
-    if (e.source !== window.parent || !d || d.type !== 'glare-import') return;
+    if (e.source !== window.parent || !d) return;
+    if (d.type === 'glare-glass') {
+      if (!S.glasses.some(x => x.id === d.id)) return;
+      S.defGlass = d.id; S.fac.forEach(f => { f.glass = d.id; });
+      renderGlassTbl(); afterGlass();
+      toast(glassById(d.id).name + ' ' + glassById(d.id).R + '%로 바꿔 다시 집계했습니다.');
+      return;
+    }
+    if (d.type !== 'glare-import') return;
     try {
       S.site.addr = d.addr || S.site.addr;
       S.site.lat = Math.round(d.lat * 1e6) / 1e6; S.site.lon = Math.round(d.lon * 1e6) / 1e6;
@@ -2021,7 +2029,8 @@ setTimeout(runAnalysis, 60);
       if (d.proj) $('projName').value = d.proj;
       if (d.nb) S.nb = d.nb.map((n, i) => ({ id: 'x' + i, name: n.name, poly: n.poly, floors: n.floors, h: n.h, src: 'vworld' }));
       RES = null; STALE = true; syncFac(); boot(true);
-      if (d.features && d.features.length) { S.vw.radius = 300; importFeatures(d.features); }
+      if (d.features && d.features.length) { S.vw.radius = 99999; importFeatures(d.features); }
+      S.vw.radius = d.radius || 300; refreshInputs();
       save(); renderSummaries();
       const run = () => RUNNING ? setTimeout(run, 200) : runAnalysis();
       setTimeout(run, 100);

@@ -600,6 +600,14 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       <h2><span class="tag sun">!</span>반사 눈부심(현휘) 분석</h2>
       <p class="note">유리에 비친 햇빛이 인접 건물의 어느 면, 몇 층에, 1년 중 언제 닿는지 계산합니다. 실제 주변을 켜면 실제 이웃 건물로 분석합니다.</p>
       <div class="namebox"><span>분석 유리</span><select id="t3glGlass" aria-label="분석할 유리"></select></div>
+      <div class="namebox"><span>분석 반경</span>
+        <select id="t3glRad" aria-label="분석 반경">
+          <option value="50" selected>건물에서 50m 이내</option>
+          <option value="100">100m 이내</option>
+          <option value="200">200m 이내</option>
+          <option value="0">불러온 주변 전체</option>
+        </select>
+      </div>
       <div class="namebox"><span>기간</span>
         <div class="seg fill" role="group" aria-label="분석 기간">
           <button id="t3glYear" aria-pressed="true">1년</button>
@@ -3072,6 +3080,25 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     $('glGlass').innerHTML = opt('A') + opt('B') + '<option value="max">카탈로그 최고 반사 · MZT128 (45%)</option>';
     $('glGlass').value = cur || (glass.A.lro >= glass.B.lro ? 'A' : 'B');
   }
+  // 분석 반경: 우리 건물 외곽선과 이웃 건물 외곽선 사이의 가장 가까운 거리로 판단
+  function segDist(p, a, b) {
+    const dx = b[0] - a[0], dz = b[1] - a[1], L = dx * dx + dz * dz;
+    const t = L ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / L)) : 0;
+    return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dz);
+  }
+  function polyGap(A, B) {
+    if (A.some(p => GlareEngine.inPoly(p[0], p[1], B)) || B.some(p => GlareEngine.inPoly(p[0], p[1], A))) return 0;
+    let m = Infinity;
+    for (const [P, Q] of [[A, B], [B, A]]) for (const p of P) for (let i = 0; i < Q.length; i++) m = Math.min(m, segDist(p, Q[i], Q[(i + 1) % Q.length]));
+    return m;
+  }
+  function glFoot() { return footprintEN().map(([e, n]) => [e, -n]); } // x, z
+  function glRadius() { return +$('glRad').value; }
+  function withinRadius(list) {
+    const R = glRadius(); if (!R) return list;
+    const F = glFoot();
+    return list.filter(b => polyGap(F, b.pts) <= R);
+  }
   // 인접 건물 → 프리즘 목록
   function glPrisms() {
     scene.updateMatrixWorld(true);
@@ -3082,9 +3109,9 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       list.push({ pts, h: m.scale.y, flh: m.userData.prism.fl });
     });
     const rl = realNeighborList();
-    if (rl) return GlareEngine.prepPrisms(rl.map(b => Object.assign({}, b, { z0: glElev ? (glElev.get(b) || 0) : 0 })));
+    if (rl) return GlareEngine.prepPrisms(withinRadius(rl).map(b => Object.assign({}, b, { z0: glElev ? (glElev.get(b) || 0) : 0 })));
     if (ctxMode === 'real') list.push(...realPrismList);
-    return GlareEngine.prepPrisms(list);
+    return GlareEngine.prepPrisms(withinRadius(list));
   }
   // 우리 건물 유리면 → 표본점(위치·바깥 방향)
   function glSamples() {
@@ -3154,12 +3181,13 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     const rl = realNeighborList();
     if (rl) {
       if (ctxMode !== 'real') setCtxMode('real');
-      const el = await glFetchElev(rl);
+      const near = withinRadius(rl);
+      const el = await glFetchElev(near);
       glElev = el ? el.map : null;
-      srcNote = `브이월드 실제 건물 ${rl.length}동 · ` + (el ? `지형 높이 반영 (${el.got}동)` : '지형은 평지로 가정 (실사 화면을 열면 지형 높이 반영)');
+      srcNote = `브이월드 실제 건물 ${near.length}동 (${glRadius() ? '건물에서 ' + glRadius() + 'm 이내' : '불러온 주변 전체 ' + rl.length + '동'}) · ` + (el ? `지형 높이 반영 (${el.got}동)` : '지형은 평지로 가정 (실사 화면을 열면 지형 높이 반영)');
     } else {
       glElev = null;
-      srcNote = onSite ? '가상 주변 (실제 건물로 분석하려면 맨 위에서 현장 주소를 먼저 검색하세요)' : '가상 주변';
+      srcNote = (onSite ? '가상 주변 (실제 건물로 분석하려면 맨 위에서 현장 주소를 먼저 검색하세요)' : '가상 주변') + (glRadius() ? ` · 건물에서 ${glRadius()}m 이내` : '');
     }
     glSrcNote = srcNote;
     const prisms = glPrisms(), samples = glSamples(), R0 = glR0();
@@ -3307,6 +3335,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   $('glDay').onclick = () => { glPeriod = 'day'; $('glYear').setAttribute('aria-pressed', 'false'); $('glDay').setAttribute('aria-pressed', 'true'); };
   $('glLive').onchange = e => { glLiveOn = e.target.checked; $('glLiveMsg').hidden = !glLiveOn; glLiveDraw(); };
   $('glGlass').onchange = () => { if (glLiveOn) glLiveDraw(); };
+  $('glRad').onchange = () => { glInvalidate('분석 반경을 바꿨습니다. 다시 분석해 주세요.'); };
   document.addEventListener('glass-pick', () => glFillGlass());
   $('glCopy').onclick = () => {
     const txt = ['우선순위\t대상\t면·층\t시기·시간대\t영향\t반사율\t원인'].concat(glRows.map(r => [LVL[r.lvl], r.title, r.face, r.when, r.amount, r.refl, r.src].join('\t'))).join('\n');
@@ -3354,7 +3383,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     const g = k => ({ id: 'kcc' + k, name: `KCC ${glass[k].key} (유리 ${k})`, R: glass[k].lro });
     // 주변 건물: 실제 주변이면 위·경도 윤곽 그대로(분석기가 직접 변환), 가상 주변이면 m 좌표
     let feats = null, nb = null;
-    const rl = realNeighborList();
+    const rl0 = realNeighborList(), rl = rl0 ? withinRadius(rl0) : null;
     if (rl) {
       const kx = 111320 * Math.cos(LAT * RAD);
       feats = rl.map(b => ({ type: 'Feature', properties: { gro_flo_co: b.floors },
@@ -3370,7 +3399,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       glasses: [g('A'), g('B'), { id: 'kccMax', name: 'KCC MZT128 (카탈로그 최고 반사)', R: 45 }],
       defGlass: (vwOpen ? vwWhich : view === 'B' ? 'B' : 'A') === 'B' ? 'kccB' : 'kccA',
       view: `${vwOpen ? '브이월드 실사' : '3D'} · ${$('siteName').textContent}`,
-      wwr, features: feats, nb, vwKey: VW_KEY, vwDomain: location.origin,
+      wwr, features: feats, nb, vwKey: VW_KEY, vwDomain: location.origin, radius: glRadius() || 300,
     };
   }
 
