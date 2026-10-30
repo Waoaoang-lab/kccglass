@@ -192,6 +192,10 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 .lvl.h { background: #c2410c; color: #fff; }
 .t3 .lvl.m { background: #f59e0b; color: #1a1a1a; }
 .t3 .lvl.l { background: var(--line); color: var(--ink); }
+.glarewrap { max-width: 1480px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+.glarebar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; }
+.glarebar .note { flex: 1 1 280px; min-width: 0; }
+#glFrame { width: 100%; height: max(760px, calc(100vh - 150px)); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); display: block; }
 .tabs button { padding: 7px 16px; }
 /* ---------- 3D 일조 비교 ---------- */
 .t3 @media (prefers-color-scheme: dark) {
@@ -288,6 +292,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   <div class="seg tabs" role="tablist" aria-label="비교 방식">
     <button id="tabPhoto" role="tab" aria-pressed="true" aria-selected="true">사진 비교</button>
     <button id="tab3d" role="tab" aria-pressed="false" aria-selected="false">3D 일조 비교</button>
+    <button id="tabGlare" role="tab" aria-pressed="false" aria-selected="false" hidden>현휘 정밀 분석</button>
   </div>
   <span class="sub" id="tabSub"></span>
   <form class="sitebar" id="siteBar" hidden autocomplete="off">
@@ -408,6 +413,14 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 </div>
 
 
+</section>
+
+<section id="viewGlare" class="glarewrap" hidden>
+  <div class="glarebar">
+    <button class="btn primary" id="glSend" type="button">3D 탭의 현장·건물·유리·주변 건물 가져오기</button>
+    <span class="note" id="glSendMsg">3D 일조 비교 탭에서 현장과 건물을 정한 뒤 누르면, 분석기에 그대로 채워지고 분석이 실행됩니다. 직접 입력해서 쓸 수도 있습니다.</span>
+  </div>
+  <iframe id="glFrame" title="건축 현휘 분석기"></iframe>
 </section>
 
 <section id="view3d" class="t3" hidden>
@@ -604,6 +617,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       <p class="glsum" id="t3glSum"></p>
       <div class="gllist" id="t3glTable"></div>
       <button class="btn" id="t3glCopy" type="button" hidden>결과 표 복사</button>
+      <button class="btn" id="t3glDeep" type="button" hidden>현휘 정밀 분석기로 보내기 (검토서 작성)</button>
       <p class="note">검토 우선순위 기준: 높음은 연간 30일 이상(반사율 15% 이상) 또는 30시간 이상, 보통은 10일 또는 8시간 이상입니다. 2021년 대법원(해운대 아이파크) 판결에서 피해 세대의 강한 반사광 일수는 연 31~187일이었습니다. 국내에는 반사율 수치 기준이 아직 없습니다. 이 결과는 설계 초기 검토용 추정이며, 공식 빛반사 영향평가를 대신하지 않습니다.</p>
     </div>
 
@@ -3225,12 +3239,49 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     try { navigator.clipboard.writeText(txt).then(done, () => { $('glSum').textContent = '복사가 막혔습니다. 결과 목록을 직접 선택해 복사해 주세요.'; }); } catch (e) { $('glSum').textContent = '복사가 막혔습니다.'; }
   };
   glFillGlass();
+  $('glDeep').hidden = !/github\.io$/.test(location.hostname);
+  $('glDeep').onclick = () => { window.__glareSendOnOpen = true; window.goTab('glare'); };
+
+  /* ---------- 현휘 정밀 분석기(glare.html)로 넘길 데이터 ---------- */
+  const KY = 110540 / 111320; // 분석기의 위도 1도 길이 기준에 맞춤
+  function glareProject() {
+    const fpEN = (() => { // 패딩 없는 바닥 윤곽 (동, 북 m)
+      if (btype === 'real' && realTarget) return realTarget.pts.map(([x, z]) => [x, -z]);
+      const r = bld.rotation.y; bld.rotation.y = 0; bld.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(bld); bld.rotation.y = r; bld.updateMatrixWorld(true);
+      const c = Math.cos(r), sn = Math.sin(r);
+      return [[b.min.x, b.min.z], [b.max.x, b.min.z], [b.max.x, b.max.z], [b.min.x, b.max.z]].map(([x, z]) => [x * c + z * sn, -(-x * sn + z * c)]);
+    })();
+    const fh = val('fh'), floors = Math.max(1, Math.round(dims.H / fh));
+    const style = btype === 'real' ? $('rStyle').value : btype;
+    const wwr = { off: 80, proj: 90, hot: 85, res: 45, cw: 85, band: 55, punch: 35 }[style] || 80;
+    const g = k => ({ id: 'kcc' + k, name: `KCC ${glass[k].key} (유리 ${k})`, R: glass[k].lro });
+    // 주변 건물: 실제 주변이면 위·경도 윤곽 그대로(분석기가 직접 변환), 가상 주변이면 m 좌표
+    let feats = null, nb = null;
+    if (ctxMode === 'real' && real && real.blds) {
+      const kx = 111320 * Math.cos(LAT * RAD);
+      feats = realPrismList.map(b => ({ type: 'Feature', properties: { gro_flo_co: b.floors },
+        geometry: { type: 'Polygon', coordinates: [b.pts.concat([b.pts[0]]).map(([x, z]) => [LON + x / kx, LAT - z / 111320])] } }));
+    } else {
+      nb = glPrisms().map((b, i) => ({ name: '주변 ' + (i + 1), poly: b.pts.map(([x, z]) => [Math.round(x * 10) / 10, Math.round(-z * KY * 10) / 10]), floors: b.floors, h: Math.round(b.h * 10) / 10 }));
+    }
+    return {
+      type: 'glare-import', proj: `${$('siteName').textContent} · ${{ off: '업무시설', res: '주거', hot: '호텔', proj: '프로젝트', real: '실제 건물' }[btype]}`,
+      addr: document.getElementById('siteQ') ? document.getElementById('siteQ').value.trim() : '',
+      lat: LAT, lon: LON, floors, fh: Math.round(dims.H / floors * 100) / 100,
+      poly: fpEN.map(([e, n]) => [Math.round(e * 100) / 100, Math.round(n * KY * 100) / 100]),
+      glasses: [g('A'), g('B'), { id: 'kccMax', name: 'KCC MZT128 (카탈로그 최고 반사)', R: 45 }],
+      defGlass: $('glGlass').value === 'B' ? 'kccB' : $('glGlass').value === 'max' ? 'kccMax' : 'kccA',
+      wwr, features: feats, nb, vwKey: VW_KEY, vwDomain: location.origin,
+    };
+  }
 
   // 현장 위치(네이버 지도 연동에서 사용)
   window.glass3d = {
     setSite(lat, lng, label) { LAT = lat; LON = lng; $('siteName').textContent = label; updateSun(true); loadReal(lat, lng); if (vwOpen) { vwModelSoon(); vwFly(); } },
     footprint() { return { W: dims.W, D: dims.D, orient: val('orient'), pts: btype === 'real' && realTarget ? realTarget.pts : null }; },
     isReal() { return btype === 'real'; },
+    glareProject,
     setOrient(a) { const el = $('orient'); el.value = Math.round(((a % 360) + 360) % 360 / 5) * 5 % 360; el.oninput({ target: el }); },
   };
   resize(); setType('off'); setView('split');
@@ -3381,27 +3432,60 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 </script>
 <script>
 (() => {
+  // 현휘 정밀 분석기: 같은 사이트의 glare.html을 탭 안에 띄우고, 3D 탭의 데이터를 넘겨줌
+  const fr = document.getElementById('glFrame'), msg = document.getElementById('glSendMsg');
+  let ready = false, queued = null;
+  function send() {
+    if (!window.glass3d || !window.glass3d.glareProject) return;
+    const d = window.glass3d.glareProject();
+    if (!ready) { queued = d; msg.textContent = '분석기를 여는 중입니다. 열리면 바로 넘깁니다…'; return; }
+    fr.contentWindow.postMessage(d, '*');
+    msg.textContent = `넘겼습니다: ${d.proj} · ${d.floors}층 · ${d.features ? d.features.length + '동(실제 주변)' : d.nb.length + '동(가상 주변)'} · 기본 유리 ${d.glasses.find(g => g.id === d.defGlass).name}`;
+  }
+  window.addEventListener('message', e => {
+    if (e.source !== fr.contentWindow || !e.data) return;
+    if (e.data.type === 'glare-ready') { ready = true; if (queued) { const d = queued; queued = null; fr.contentWindow.postMessage(d, '*'); msg.textContent = `넘겼습니다: ${d.proj}`; } }
+    if (e.data.type === 'glare-msg') msg.textContent = e.data.text;
+  });
+  window.glareTab = {
+    open() {
+      if (!fr.getAttribute('src')) fr.src = 'glare.html';
+      if (window.__glareSendOnOpen) { window.__glareSendOnOpen = false; send(); }
+    },
+  };
+  document.getElementById('glSend').onclick = send;
+})();
+</script>
+<script>
+(() => {
   // 탭 전환: #photo / #model3d 로 바로 열 수 있음. 유리 A·B 제품 선택은 두 탭이 공유
   const SUB = {
     photo: '시공사진·조감도 위에 두 가지 유리를 적용해 좌우로 비교',
     model3d: '용도별 건물을 세우고 날짜·시각별 햇빛 아래에서 두 유리를 좌우로 비교',
+    glare: '고반사 유리의 반사광이 인접 건물 어느 층·면에 언제 닿는지 연간 분석하고 검토서로 정리',
   };
+  const onSite = /github\.io$/.test(location.hostname);
+  document.getElementById('tabGlare').hidden = !onSite;
+  const pick = () => { const h = location.hash.slice(1); return h === 'model3d' || (h === 'glare' && onSite) ? h : 'photo'; };
   function show(t) {
-    const is3d = t === 'model3d';
-    document.getElementById('viewPhoto').hidden = is3d;
-    document.getElementById('view3d').hidden = !is3d;
-    document.body.dataset.tab = is3d ? '3d' : 'photo';
-    for (const [id, on] of [['tabPhoto', !is3d], ['tab3d', is3d]]) {
+    document.getElementById('viewPhoto').hidden = t !== 'photo';
+    document.getElementById('view3d').hidden = t !== 'model3d';
+    document.getElementById('viewGlare').hidden = t !== 'glare';
+    document.body.dataset.tab = t === 'model3d' ? '3d' : t;
+    for (const [id, on] of [['tabPhoto', t === 'photo'], ['tab3d', t === 'model3d'], ['tabGlare', t === 'glare']]) {
       const b = document.getElementById(id); b.setAttribute('aria-pressed', on); b.setAttribute('aria-selected', on);
     }
     document.getElementById('tabSub').textContent = SUB[t];
+    if (t === 'glare' && window.glareTab) window.glareTab.open();
     window.dispatchEvent(new Event('resize'));
   }
   const go = t => { if (location.hash !== '#' + t) location.hash = t; else show(t); };
+  window.goTab = go;
   document.getElementById('tabPhoto').onclick = () => go('photo');
   document.getElementById('tab3d').onclick = () => go('model3d');
-  window.addEventListener('hashchange', () => show(location.hash === '#model3d' ? 'model3d' : 'photo'));
-  show(location.hash === '#model3d' ? 'model3d' : 'photo');
+  document.getElementById('tabGlare').onclick = () => go('glare');
+  window.addEventListener('hashchange', () => show(pick()));
+  show(pick());
   // 현장 거리뷰: 주소로 네이버·카카오 지도 검색을 새 탭에서 열기
   const q = document.getElementById('svQuery');
   const upd = () => {
