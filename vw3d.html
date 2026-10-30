@@ -158,6 +158,87 @@
     hidden.forEach(function (t) { try { t.show = true; } catch (e) {} });
     hidden = [];
   }
+  /* ---------- 현휘 분석 결과를 실사 위에 표시 ----------
+     좌표: 메인 프로그램의 현장 기준 (x 동, y 위, z 남, m). 높이는 현장 지반고(h0) 기준 */
+  var glEnts = [], lineEnts = [];
+  function CgC() { return viewer.camera.positionCartographic.constructor; }
+  function ColorC() { return viewer.scene.backgroundColor.constructor; }
+  function groundAt(lat, lng) {
+    try { var h = viewer.scene.globe.getHeight(CgC().fromDegrees(lng, lat)); return isFinite(h) ? h : null; } catch (e) { return null; }
+  }
+  function h0() { var h = groundAt(LAT, LNG); return h == null ? 0 : h; }
+  function L2C(x, y, z, base) { return C3().fromDegrees(LNG + x / (111320 * Math.cos(LAT * RAD)), LAT - z / 111320, base + y); }
+  function enuAxes() {
+    var l = LNG * RAD, p = LAT * RAD;
+    return { e: [-Math.sin(l), Math.cos(l), 0], n: [-Math.sin(p) * Math.cos(l), -Math.sin(p) * Math.sin(l), Math.cos(p)], u: [Math.cos(p) * Math.cos(l), Math.cos(p) * Math.sin(l), Math.sin(p)] };
+  }
+  function L2D(v) { // 현장 기준 방향 → 지구 중심 좌표 방향
+    var b = enuAxes(), x = v[0], y = v[1], nz = -v[2], C = C3();
+    var r = new C(b.e[0] * x + b.n[0] * nz + b.u[0] * y, b.e[1] * x + b.n[1] * nz + b.u[1] * y, b.e[2] * x + b.n[2] * nz + b.u[2] * y);
+    return C.normalize(r, r);
+  }
+  function clearEnts(list) { list.forEach(function (e) { viewer.entities.remove(e); }); list.length = 0; }
+  function colR(R, a) { var t = Math.max(0, Math.min(1, (R - 0.08) / 0.3)); return new (ColorC())(1, 0.82 - 0.55 * t, 0.25 - 0.08 * t, a); }
+  function drawPts(pts, sel) {
+    clearEnts(glEnts);
+    var base = h0();
+    pts.forEach(function (p) { glEnts.push(viewer.entities.add({ position: L2C(p[0], p[1], p[2], base), point: { pixelSize: 6, color: colR(p[3], sel.length ? 0.35 : 0.95), outlineWidth: 0 } })); });
+    sel.forEach(function (p) { glEnts.push(viewer.entities.add({ position: L2C(p[0], p[1], p[2], base), point: { pixelSize: 11, color: new (ColorC())(1, 0.23, 0.12, 1), outlineColor: new (ColorC())(1, 1, 1, 1), outlineWidth: 1.5 } })); });
+    redraw();
+  }
+  function drawLines(lines, color) {
+    clearEnts(lineEnts);
+    var base = h0(), c = color || new (ColorC())(1, 0.69, 0.13, 0.75);
+    lines.forEach(function (l) {
+      lineEnts.push(viewer.entities.add({ polyline: { positions: [L2C(l[0], l[1], l[2], base), L2C(l[3], l[4], l[5], base)], width: 2, material: c } }));
+    });
+    redraw();
+  }
+  // 브이월드 실제 3D 형상(건물·지형)에 광선을 쏴서 반사광이 닿는 곳 찾기
+  var realBusy = false;
+  async function glareReal(d) {
+    var sc = viewer.scene;
+    if (typeof sc.pickFromRay !== 'function') { parent.postMessage({ type: 'vw-glare-real', err: '이 브이월드 버전은 실제 형상 광선 추적을 지원하지 않습니다. 기본 분석 결과를 참고해 주세요.', groups: [] }, '*'); return; }
+    if (realBusy) return; realBusy = true;
+    var RayC = viewer.camera.getPickRay({ x: 1, y: 1 }).constructor, C = C3(), base = h0();
+    var excl = []; try { ['A', 'B'].forEach(function (k) { if (ents[k]) excl.push(ents[k]); }); } catch (e) {}
+    var sunD = L2D(d.sun), shaded = 0, hits = [], lines = [];
+    for (var i = 0; i < d.samples.length; i++) {
+      var s = d.samples[i], n = s.n, c = n[0] * d.sun[0] + n[1] * d.sun[1] + n[2] * d.sun[2];
+      var o = L2C(s.p[0] + n[0] * 0.8, s.p[1] + n[1] * 0.8, s.p[2] + n[2] * 0.8, base);
+      var blk = null; try { blk = sc.pickFromRay(new RayC(o, sunD), excl); } catch (e) {}
+      if (blk && blk.position && C.distance(blk.position, o) < 3000) { shaded++; }
+      else {
+        var r = [2 * c * n[0] - d.sun[0], 2 * c * n[1] - d.sun[1], 2 * c * n[2] - d.sun[2]];
+        var hit = null; try { hit = sc.pickFromRay(new RayC(o, L2D(r)), excl); } catch (e) {}
+        if (hit && hit.position && C.distance(hit.position, o) < 700) {
+          var g = viewer.scene.globe.ellipsoid.cartesianToCartographic(hit.position), lat = g.latitude / RAD, lng = g.longitude / RAD;
+          var gr = groundAt(lat, lng), above = gr == null ? g.height - base : g.height - gr;
+          var lx = (lng - LNG) * 111320 * Math.cos(LAT * RAD), lz = -(lat - LAT) * 111320, ly = g.height - base;
+          var isBld = hit.object && (typeof hit.object.getProperty === 'function' || (hit.object.primitive && hit.object.primitive !== sc.globe));
+          hits.push({ x: lx, z: lz, above: above, bld: !!isBld });
+          lines.push([s.p[0], s.p[1], s.p[2], lx, ly, lz]);
+        }
+      }
+      if (i % 20 === 19) { say('실제 형상에 광선 추적 중… ' + Math.round((i + 1) / d.samples.length * 100) + '%'); await new Promise(function (r) { setTimeout(r, 0); }); }
+    }
+    drawLines(lines, new (ColorC())(1, 0.42, 0.1, 0.85));
+    // 닿은 곳을 방향·거리 20m 칸으로 묶어서 층 범위 정리
+    var DIRS = ['북', '북북동', '북동', '동북동', '동', '동남동', '남동', '남남동', '남', '남남서', '남서', '서남서', '서', '서북서', '북서', '북북서'];
+    var map = {};
+    hits.forEach(function (h) {
+      var az = (Math.atan2(h.x, -h.z) / RAD + 360) % 360, dist = Math.hypot(h.x, h.z);
+      var key = h.bld ? Math.round(az / 22.5) % 16 + '|' + Math.round(dist / 20) : 'ground';
+      var m = map[key] || (map[key] = { label: h.bld ? DIRS[Math.round(az / 22.5) % 16] + '쪽 약 ' + Math.round(dist / 10) * 10 + 'm 건물' : '지면·도로', lo: 1e9, hi: -1e9, n: 0, bld: h.bld });
+      m.n++; m.lo = Math.min(m.lo, h.above); m.hi = Math.max(m.hi, h.above);
+    });
+    var groups = Object.keys(map).map(function (k) { var m = map[k]; return { label: m.label, n: m.n, floors: m.bld ? Math.max(1, Math.floor(m.lo / 3.4) + 1) + '~' + Math.max(1, Math.floor(m.hi / 3.4) + 1) + '층 (지면에서 ' + Math.round(m.lo) + '~' + Math.round(m.hi) + 'm)' : m.n + '곳' }; })
+      .sort(function (a, b) { return b.n - a.n; });
+    realBusy = false;
+    parent.postMessage({ type: 'vw-glare-real', cast: d.samples.length, shaded: shaded, total: hits.length, groups: groups }, '*');
+    say('실제 형상 광선 추적 완료: ' + hits.length + '개가 닿음 (주황 선)');
+  }
+
   function show(k) { ['A', 'B'].forEach(function (x) { if (ents[x]) ents[x].show = x === k; }); redraw(); }
   function setTime(ms) {
     try {
@@ -186,6 +267,13 @@
     try {
       if (d.type === 'place') place(d);
       else if (d.type === 'show') show(d.which);
+      else if (d.type === 'glare-pts') drawPts(d.pts || [], d.sel || []);
+      else if (d.type === 'glare-lines') drawLines(d.lines || []);
+      else if (d.type === 'glare-real') glareReal(d);
+      else if (d.type === 'heights') {
+        var b0 = groundAt(LAT, LNG);
+        parent.postMessage({ type: 'vw-heights', id: d.id, h0: b0, h: d.pts.map(function (p) { var h = groundAt(p[0], p[1]); return h == null ? NaN : h; }) }, '*');
+      }
       else if (d.type === 'radius') { RADIUS = d.r; applyLimits(); say(RADIUS > 0 ? '실사 범위: 현장 반경 ' + RADIUS + 'm' : '실사 범위 제한을 껐습니다 (느려질 수 있습니다).'); }
       else if (d.type === 'time') setTime(d.ms);
       else if (d.type === 'fly') { fly(d); hideSoon(2200, 4); }
