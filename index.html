@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-mode="glare">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{box-sizing:border-box}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
-<title>유리 색상 비교기</title>
+<title>건축 현휘 분석</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -482,7 +482,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
         </g>
       </svg>
     </div>
-    <div class="hint">화면을 <b>드래그</b>하면 회전, <b>휠·두 손가락</b>으로 확대, <b>우클릭 드래그</b>로 이동합니다. 가운데 손잡이를 끌면 왼쪽 유리 A, 오른쪽 유리 B 비교선이 움직입니다.</div>
+    <div class="hint" id="t3stageHint">화면을 <b>드래그</b>하면 회전, <b>휠·두 손가락</b>으로 확대, <b>우클릭 드래그</b>로 이동합니다. 가운데 손잡이를 끌면 왼쪽 유리 A, 오른쪽 유리 B 비교선이 움직입니다.</div>
   </section>
 
   <aside class="panel">
@@ -2681,7 +2681,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   function buildCard(key) {
     const g = glass[key], card = $('card' + key), p = PRESETS[g.preset];
     card.innerHTML = `
-      <h2><span class="tag">${key}</span>유리 ${key} ${key === 'A' ? '(왼쪽)' : '(오른쪽)'}</h2>
+      <h2><span class="tag">${key}</span>${document.documentElement.dataset.mode === 'glare' ? '비교 유리 ' + key + (key === 'A' ? ' (예: 저반사 로이)' : ' (예: 기존·경쟁 유리)') : '유리 ' + key + ' ' + (key === 'A' ? '(왼쪽)' : '(오른쪽)')}</h2>
       <div class="namebox"><span>제품</span>
         <select id="t3prod${key}" aria-label="유리 ${key} 제품">
           ${Object.keys(CAT_KO).map(cat => `<optgroup label="${cat} (${CAT_KO[cat]})">${PRESETS.map((q, i) => q.cat !== cat ? '' :
@@ -3869,6 +3869,32 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   };
   q.addEventListener('input', upd);
   q.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('svNaver').click(); });
+})();
+</script>
+<style>
+/* 현휘 분석 전용 화면에서 숨기는 유리 색상 비교 요소 */
+html[data-mode="glare"] .topbar .tabs, html[data-mode="glare"] #viewPhoto,
+html[data-mode="glare"] #t3chipA, html[data-mode="glare"] #t3chipB, html[data-mode="glare"] #t3split { display: none !important; }
+</style>
+<script>
+(() => {
+  // 현휘 분석 전용: 홈페이지(index.html)를 이 모드로 만들면 사진 비교·좌우 색상 비교를 빼고 3D 현장·현휘 분석만 남김
+  if (document.documentElement.dataset.mode !== 'glare') return;
+  const $ = id => document.getElementById(id);
+  document.title = '건축 현휘 분석';
+  document.querySelector('.topbar h1').textContent = '건축 현휘 분석';
+  $('tabSub').textContent = '현장 건물에 유리를 적용했을 때 반사광이 인접 건물 어느 층·면에 언제, 얼마나 세게 닿는지 분석';
+  if (window.goTab) window.goTab('model3d');
+  // 좌우 비교 버튼 묶음 숨기고, 화면엔 분석 유리 하나만 보여 줌
+  $('t3vSplit').parentElement.hidden = true;
+  $('t3vA').click();
+  $('t3stageHint').innerHTML = '화면을 <b>드래그</b>하면 회전, <b>휠·두 손가락</b>으로 확대, <b>우클릭 드래그</b>로 이동합니다. 건물에는 현휘 카드에서 고른 분석 유리가 입혀집니다.';
+  $('t3glGlass').addEventListener('change', e => { if (e.target.value === 'A' || e.target.value === 'B') $('t3v' + e.target.value).click(); });
+  // 카드 순서: 현장 → 건물 → 현휘 분석 → 비교 유리 A·B → 주변 → 해
+  const bcard = $('t3bSize').closest('.card'), gl = $('t3glCard');
+  bcard.after(gl); gl.after($('t3cardA')); $('t3cardA').after($('t3cardB'));
+  // 화면 주소가 #photo여도 3D로
+  window.addEventListener('hashchange', () => { if (location.hash !== '#model3d') window.goTab('model3d'); });
 })();
 </script>
 
