@@ -1032,6 +1032,7 @@ function renderResults() {
   buildReport();
 }
 function renderCmp() {
+  if (S.single || S.glasses.length <= 1) { const c = $('cmpBars').closest('.card'); if (c) c.hidden = true; return; }
   const cur = glassById(S.defGlass), mx = Math.max(1, ...RES.cmp.map(c => c.mid));
   $('cmpBars').innerHTML = RES.cmp.slice().sort((a, b) => a.g.R - b.g.R).map(c => `<div class="bar ${c.g.id === cur.id ? 'cur' : ''}"><div class="lbl" title="${esc(c.g.name)}">${esc(c.g.name)} <small>${c.g.R}%</small></div><div class="trk"><i class="mid" style="width:${c.mid / mx * 100}%"></i><i style="width:${c.strong / mx * 100}%"></i></div><div class="v" title="'중' 이상 ${fmt(c.mid, 0)}시간">${fmt(c.strong, 1)}h</div></div>`).join('');
   const lo = RES.cmp.slice().sort((a, b) => a.g.R - b.g.R)[0], cc = RES.cmp.find(c => c.g.id === cur.id);
@@ -1060,7 +1061,7 @@ function noteLines() {
     out.push(over.length ? `참고 기준(세기 ${P.iLow} W/㎡ 이상 반사가 1일 ${S.cfg.dailyLim}분 또는 연 ${S.cfg.annualLim}시간)을 넘는 건물: ${over.join(', ')}.` : `모든 영향 건물이 참고 기준(1일 ${S.cfg.dailyLim}분, 연 ${S.cfg.annualLim}시간) 이내입니다.`);
   }
   const sorted = RES.cmp.slice().sort((a, b) => a.g.R - b.g.R), cc = RES.cmp.find(c => c.g.id === cur.id), lo = sorted[0];
-  if (cc && lo && aff.length) {
+  if (cc && lo && aff.length && lo.g.id !== cc.g.id) {
     const red = cc.strong > 0 ? (1 - lo.strong / cc.strong) * 100 : 0;
     out.push(`유리를 ${lo.g.name}(${lo.g.R}%)로 바꾸면 반사광이 닿는 시간은 같지만 세기가 반사율에 비례해 약해져, 기준 초과 건물이 ${cc.over}동에서 ${lo.over}동으로 바뀌고, '강' 등급(≥${P.iHigh} W/㎡) 시간이 ${fmt(cc.strong, 1)}시간에서 ${fmt(lo.strong, 1)}시간으로${cc.strong > 0 ? ' ' + fmt(red, 0) + '%' : ''} 줄고 최대 반사 강도는 ${fmt(cc.maxI, 0)} → ${fmt(lo.maxI, 0)} W/㎡로 낮아집니다.`);
   }
@@ -1900,7 +1901,7 @@ function bldSection(i, num) {
 <table><tr><th class="l">원인 입면</th><th>연간 시간</th><th>비중</th></tr>${D.facH.map(x => `<tr><td class="l">${dirLabel(RES.fac[x.f].az)} 입면 (${fmt(RES.fac[x.f].az, 0)}°)</td><td class="num">${fmt(x.h, 1)}h</td><td class="num">${fmt(x.h / fsum * 100, 0)}%</td></tr>`).join('')}</table></div></div>
 <img src="${heat}" alt="${esc(name)} 연중 발생 분포"><p class="cap">${esc(name)} 연중 발생 분포 · 노랑 약, 주황 중, 빨강 강</p>
 <table><tr><th class="l">현휘가 긴 날</th><th>시작</th><th>종료</th><th>지속</th><th>최대 강도</th></tr>${D.topDays.map(d => `<tr><td class="l">${mdStr(y, d.d)}</td><td class="num">${hhmm(d.s)}</td><td class="num">${hhmm(d.e + RES.P.minStep)}</td><td class="num">${d.n * RES.P.minStep}분</td><td class="num">${fmt(d.I, 0)} W/㎡</td></tr>`).join('')}</table>
-<table><tr><th class="l">유리 (이 동 기준)</th><th>반사율</th><th>최대 강도</th><th class="l">'강' 등급 시간</th></tr>${D.cmp.map(c => `<tr${c.g.id === S.defGlass ? ' style="background:#fdf3e6"' : ''}><td class="l">${esc(c.g.name)}${c.g.id === S.defGlass ? ' (적용)' : ''}</td><td class="num">${c.g.R}%</td><td class="num">${fmt(c.r.maxI, 0)}</td><td class="l"><span class="bar"><i style="width:${Math.max(1, c.r.strongH / cmx * 200)}px"></i><span class="num">${fmt(c.r.strongH, 1)}h</span></span></td></tr>`).join('')}</table>
+${S.glasses.length > 1 ? `<table><tr><th class="l">유리 (이 동 기준)</th><th>반사율</th><th>최대 강도</th><th class="l">'강' 등급 시간</th></tr>${D.cmp.map(c => `<tr${c.g.id === S.defGlass ? ' style="background:#fdf3e6"' : ''}><td class="l">${esc(c.g.name)}${c.g.id === S.defGlass ? ' (적용)' : ''}</td><td class="num">${c.g.R}%</td><td class="num">${fmt(c.r.maxI, 0)}</td><td class="l"><span class="bar"><i style="width:${Math.max(1, c.r.strongH / cmx * 200)}px"></i><span class="num">${fmt(c.r.strongH, 1)}h</span></span></td></tr>`).join('')}</table>` : ''}
 <p class="cap" style="margin-top:8px"><b style="color:#1b232c">검토 의견</b></p><ul>${bldOpinion(i, D).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
 </section>`;
 }
@@ -1962,10 +1963,10 @@ ${img3d ? `<div><img src="${img3d}" alt="3D 모델"><p class="cap">3D 모델 · 
 ${recs.map((R, i) => { const j = judge(R), top = Object.entries(R.fac).sort((a, b) => b[1] - a[1])[0]; return `<tr><td class="l">${esc(names[i])}</td><td>${RES.nbInfo[i].floors}층</td><td class="num">${R.hours ? fmt(R.hours, 1) + 'h' : '-'}</td><td class="num">${R.midH ? fmt(R.midH, 1) + 'h' : '-'}</td><td class="num">${R.maxDailyMid ? R.maxDailyMid + '분' : '-'}</td><td>${R.first != null ? mdStr(y, R.first) + '~' + mdStr(y, R.last) : '-'}</td><td class="num">${R.maxM >= 0 ? hhmm(R.minM) + '–' + hhmm(R.maxM + RES.P.minStep) : '-'}</td><td>${top ? dirLabel(RES.fac[+top[0]].az) : '-'}</td><td class="num">${R.maxI ? fmt(R.maxI, 0) : '-'}</td><td class="${j.k}">${j.t}</td></tr>`; }).join('')}</table>
 <h2><span>6</span>연중 현휘 발생 분포</h2>
 <img src="${heatImg}" alt="연중 발생 분포"><p class="cap">가로: 월, 세로: 시각(KST). 노랑 약(&lt;${P.iLow}), 주황 중(${P.iLow}–${P.iHigh}), 빨강 강(≥${P.iHigh} W/㎡). 회색 곡선은 일출·일몰.</p>
-<h2><span>7</span>유리 반사율별 비교</h2>
+${S.glasses.length > 1 ? `<h2><span>7</span>유리 반사율별 비교</h2>
 <table><tr><th class="l">유리</th><th>외부 반사율</th><th>최대 반사 강도</th><th>'중' 이상 시간</th><th class="l">'강' 등급 시간 (≥${P.iHigh} W/㎡)</th></tr>
 ${RES.cmp.slice().sort((a, b) => a.g.R - b.g.R).map(c => `<tr${c.g.id === S.defGlass ? ' style="background:#fdf3e6"' : ''}><td class="l">${esc(c.g.name)}${c.g.id === S.defGlass ? ' (적용)' : ''}</td><td class="num">${c.g.R}%</td><td class="num">${fmt(c.maxI, 0)} W/㎡</td><td class="num">${fmt(c.mid, 1)}h</td><td class="l"><span class="bar"><i style="width:${Math.max(1, c.strong / mx * 220)}px"></i><span class="num">${fmt(c.strong, 1)}h</span></span></td></tr>`).join('')}</table>
-<p class="note">형상과 배치가 같으면 반사광이 닿는 시간은 유리 종류와 무관하게 같고, 반사 강도만 달라집니다. 시간 값은 전체 인접 건물 합계입니다.</p>
+<p class="note">형상과 배치가 같으면 반사광이 닿는 시간은 유리 종류와 무관하게 같고, 반사 강도만 달라집니다. 시간 값은 전체 인접 건물 합계입니다.</p>` : ''}
 ${detail}
 <h2 class="${scope === 'all' ? 'pb' : ''}"><span>${n0}</span>저감 방안</h2>
 <ul>${mitigations().map(t => `<li>${esc(t)}</li>`).join('')}</ul>
@@ -2069,6 +2070,12 @@ function drawWindows(A, B, f, H, glassCol, op, wallCol, fi) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
   R3.stat.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: glassCol, transparent: true, opacity: Math.min(0.95, op + 0.2), side: THREE.DoubleSide })));
 }
+// 단일 유리 모드: 유리 추가·유리별 비교를 숨김
+function applySingle() {
+  const one = S.single || S.glasses.length <= 1;
+  $('btnAddGlass').hidden = !!S.single;
+  const card = $('cmpBars').closest('.card'); if (card) card.hidden = one;
+}
 // 인접 건물이 바뀌면 이전 시각의 반사 결과(NOW)를 먼저 지움 → 화면을 다시 그릴 때 사라진 벽을 찾다 나던 오류 방지
 { const _rebuildViz = rebuildViz; rebuildViz = function () { NOW = null; _rebuildViz(); }; }
 (() => {
@@ -2080,7 +2087,7 @@ function drawWindows(A, B, f, H, glassCol, op, wallCol, fi) {
   };
   $('bFrontW').onchange = e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return; S.bld.frontWwr = Math.max(0, Math.min(100, v)); applyStyle(); };
   $('bSideW').onchange = e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return; S.bld.sideWwr = Math.max(0, Math.min(100, v)); applyStyle(); };
-  renderStyleUI(); build3D();
+  renderStyleUI(); build3D(); applySingle();
 })();
 </script>
 <script>
@@ -2104,7 +2111,9 @@ function drawWindows(A, B, f, H, glassCol, op, wallCol, fi) {
       S.site.addr = d.addr || S.site.addr;
       S.site.lat = Math.round(d.lat * 1e6) / 1e6; S.site.lon = Math.round(d.lon * 1e6) / 1e6;
       Object.assign(S.bld, { shape: 'poly', polyText: d.poly.map(p => p[0] + ', ' + p[1]).join('\n'), rot: 0, ox: 0, oy: 0, floors: d.floors, fh: d.fh, gfa: 0, glassZ0: d.glassZ0 || 0 });
-      S.glasses = d.glasses.concat(S.glasses.filter(g => !/^kcc/.test(g.id)));
+      // 단일 유리 모드(현휘 분석 홈페이지): 넘겨받은 유리 하나만 씀, 유리 비교는 숨김
+      S.single = !!d.single;
+      S.glasses = S.single ? d.glasses.slice() : d.glasses.concat(S.glasses.filter(g => !/^kcc/.test(g.id)));
       S.defGlass = d.defGlass; S.defWwr = d.wwr; S.fac = d.fac && d.fac.length === d.poly.length ? d.fac.map(f => ({ wwr: f.wwr, glass: f.glass })) : [];
       if (d.vwKey) S.vw.key = d.vwKey;
       if (d.vwDomain) S.vw.domain = d.vwDomain;
@@ -2117,7 +2126,7 @@ function drawWindows(A, B, f, H, glassCol, op, wallCol, fi) {
       RES = null; STALE = true; syncFac(); boot(true);
       if (d.features && d.features.length) { S.vw.radius = 99999; importFeatures(d.features); }
       S.vw.radius = d.radius || 300; refreshInputs();
-      save(); renderSummaries(); if (window.renderStyleUI) renderStyleUI();
+      save(); renderSummaries(); if (window.renderStyleUI) renderStyleUI(); applySingle();
       const run = () => RUNNING ? setTimeout(run, 200) : runAnalysis();
       setTimeout(run, 100);
       window.parent.postMessage({ type: 'glare-msg', text: `분석기에 넘겼습니다: ${d.proj} · ${d.floors}층 · 주변 ${S.nb.length}동 · 기본 유리 ${glassById(S.defGlass).name} ${glassById(S.defGlass).R}% · 분석을 실행합니다.` }, '*');
