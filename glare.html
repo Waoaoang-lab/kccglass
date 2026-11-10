@@ -348,7 +348,12 @@ table.res tbody tr:hover td{background:var(--sunk)}
         <label class="f"><span>반사 강도 '중' 이상 W/㎡</span><input type="number" data-k="cfg.iLow"></label>
         <label class="f"><span>반사 강도 '강' 이상 W/㎡</span><input type="number" data-k="cfg.iHigh"></label>
       </div>
-      <p class="hint">기준 초과 판정에는 반사 세기가 '중' 이상(기본 100 W/㎡)인 반사만 셉니다. 세기 = 맑은 날 직달일사 × 입사각별 유리 반사율이라, 반사율이 낮은 유리일수록 같은 경로의 반사도 약하게 계산됩니다. 참고 기준 30분/일 · 30시간/년은 독일 LAI 빛공해 지침의 반사광 눈부심 판단 관행을 따른 기본값입니다. 국내 법정 기준이 아니므로 심의 조건에 맞게 조정하세요.</p>
+      <div class="g2">
+        <label class="f"><span>판정 창 폭 m</span><input type="number" min="1" max="10" step="0.5" id="cfgCellW"></label>
+        <label class="f"><span>일조율 % (서울 평년 46)</span><input type="number" min="5" max="100" step="1" id="cfgSunPct"></label>
+      </div>
+      <label class="chk" style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="cfgUseWx"> 연간 판정에 일조율(날씨) 반영</label>
+      <p class="hint">판정은 지침처럼 <b>창 하나 단위</b>(이웃 벽을 폭 3m × 1개 층 칸으로 나눔)로 하고, 해와 10° 이내로 겹치는 반사는 뺍니다. 하루 기준은 맑은 날 최대, 연간 기준은 일조율을 켜면 날씨를 반영한 기대치로 봅니다. 기준 초과 판정에는 반사 세기가 '중' 이상(기본 100 W/㎡)인 반사만 셉니다. 세기 = 맑은 날 직달일사 × 입사각별 유리 반사율이라, 반사율이 낮은 유리일수록 같은 경로의 반사도 약하게 계산됩니다. 참고 기준 30분/일 · 30시간/년은 독일 LAI 빛공해 지침의 반사광 눈부심 판단 관행을 따른 기본값입니다. 국내 법정 기준이 아니므로 심의 조건에 맞게 조정하세요.</p>
     </div>
   </details>
 </aside>
@@ -695,6 +700,7 @@ function hitsAt(sc, P, doy, minute, geom) {
 }
 
 /* 하루 분석 → 이벤트 누적 */
+const COS10 = Math.cos(10 * Math.PI / 180);
 function analyzeDay(sc, P, doy, ev) {
   for (let m = P.minStart; m <= P.minEnd; m += P.minStep) {
     const sp = sunPosition(kstToUtc(P.year, doy, m), P.lat, P.lon);
@@ -703,8 +709,11 @@ function analyzeDay(sc, P, doy, ev) {
     for (const F of sc.facades) {
       const sn = s[0] * F.n[0] + s[1] * F.n[1];
       if (sn < 0.02 || !F.cands.length) continue;
-      const hs = facadeHits(sc, F, s, sn, P.maxDist, false);
-      for (const h of hs) ev.push({ r: h.rec, d: doy, m, f: F.idx, c: sn, n: dni, a: h.area * h.vis, alt: sp.alt, az: sp.az });
+      const hs = facadeHits(sc, F, s, sn, P.maxDist, true);
+      // 반사광 방향 r, 관찰자(이웃 창)가 반사면을 볼 때 해와 10° 이내면 x10 (해 자체가 이미 눈부신 상황 → 판정 제외)
+      const r = [-s[0] + 2 * sn * F.n[0], -s[1] + 2 * sn * F.n[1], -s[2]];
+      const x10 = -(r[0] * s[0] + r[1] * s[1] + r[2] * s[2]) > COS10;
+      for (const h of hs) ev.push({ r: h.rec, d: doy, m, f: F.idx, c: sn, n: dni, a: h.area * h.vis, alt: sp.alt, az: sp.az, w: h.w, vis: h.vis, cp: Float32Array.from(h.poly.flat()), x10 });
     }
   }
 }
@@ -753,8 +762,50 @@ function aggregate(ev, nRec, P, R0map, override, wwrMap) {
     R.nDaysMid = R.midDays.size * P.dayStep; R.maxDailyMid = 0; R.maxDayMid = null;
     R.midDays.forEach((v, d) => { if (v > R.maxDailyMid) { R.maxDailyMid = v; R.maxDayMid = d; } });
   });
+  // 창 단위 판정: 이웃 벽을 폭 cellW × 1개 층 칸으로 나눠, 반사 영역이 칸 중심을 덮는 시각을 셈
+  //  · 세기 '중'(iLow) 이상만 · 해와 10° 이내 반사 제외 · 유리 비율(wwr)만큼 그 칸에 유리 상이 맺힐 확률로 가중
+  if (P.walls) {
+    const cells = new Map();
+    for (const e of ev) {
+      if (!e.cp || e.x10) continue;
+      const R0 = override != null ? override : (R0map[e.f] != null ? R0map[e.f] : 0.3);
+      if (fresnelR(e.c, R0) * e.n < P.iLow) continue;
+      const W = P.walls[e.w]; if (!W) continue;
+      const info = P.nbInfo[W.rec] || {}, F = Math.max(1, info.floors || Math.round(W.h / 3.4)), flh = W.h / F;
+      const ncol = Math.max(1, Math.ceil(W.L / P.cellW)), cw = W.L / ncol, cp = e.cp;
+      let u0 = Infinity, u1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (let k = 0; k < cp.length; k += 2) { u0 = Math.min(u0, cp[k]); u1 = Math.max(u1, cp[k]); z0 = Math.min(z0, cp[k + 1]); z1 = Math.max(z1, cp[k + 1]); }
+      const wgt = Math.min(1, (wwrMap && wwrMap[e.f] != null ? wwrMap[e.f] : 1) * (e.vis || 1)), stepKey = e.d * 1440 + e.m;
+      for (let fl = Math.max(0, Math.floor(z0 / flh)); fl <= Math.min(F - 1, Math.floor(z1 / flh)); fl++) {
+        const zc = (fl + 0.5) * flh;
+        for (let col = Math.max(0, Math.floor(u0 / cw)); col <= Math.min(ncol - 1, Math.floor(u1 / cw)); col++) {
+          const uc = (col + 0.5) * cw;
+          let inside = false;
+          for (let a = 0, b = cp.length - 2; a < cp.length; b = a, a += 2) {
+            if ((cp[a + 1] > zc) !== (cp[b + 1] > zc) && uc < (cp[b] - cp[a]) * (zc - cp[a + 1]) / (cp[b + 1] - cp[a + 1]) + cp[a]) inside = !inside;
+          }
+          if (!inside) continue;
+          const key = e.w * 1e6 + fl * 1000 + col;
+          let c = cells.get(key); if (!c) cells.set(key, c = { w: e.w, rec: W.rec, fl, col, ncol, last: -1, n: 0, lastW: 0, days: new Map() });
+          if (c.last === stepKey) { if (wgt > c.lastW) { const dw = wgt - c.lastW; c.n += dw; c.days.set(e.d, c.days.get(e.d) + P.minStep * dw); c.lastW = wgt; } continue; }
+          c.last = stepKey; c.lastW = wgt; c.n += wgt; c.days.set(e.d, (c.days.get(e.d) || 0) + P.minStep * wgt);
+        }
+      }
+    }
+    rec.forEach(R => { R.cells = { hit: 0, over: 0, worst: null }; });
+    for (const c of cells.values()) {
+      const R = rec[c.rec]; if (!R) continue;
+      let md = 0; c.days.forEach(v => { if (v > md) md = v; });
+      const hours = c.n * P.minStep * P.dayStep / 60, over = md >= P.dailyLim || hours * P.wx >= P.annualLim;
+      R.cells.hit++; if (over) R.cells.over++;
+      const sc2 = (over ? 1e6 : 0) + md * 100 + hours;
+      if (!R.cells.worst || sc2 > R.cells.worst.sc) R.cells.worst = { sc: sc2, w: c.w, fl: c.fl + 1, col: c.col + 1, ncol: c.ncol, maxDaily: Math.round(md), hours, over };
+    }
+  }
   return { rec, grid, keyMap };
 }
+function cellW() { return Math.max(1, +S.cfg.cellW || 3); }
+function wxFactor() { return S.cfg.useWx === false ? 1 : Math.max(0.05, Math.min(1, (S.cfg.sunPct ?? 46) / 100)); }
 
 if (typeof module !== 'undefined') module.exports = { sunPosition, kstToUtc, sunVec, clearDNI, fresnelR, buildScene, hitsAt, analyzeDay, aggregate, polyArea, ensureCCW, clipRect };
 
@@ -965,7 +1016,7 @@ async function runAnalysis() {
     analyzeDay(sc, P, days[i], ev);
     if (i % 12 === 0) { $('runStatus').className = ''; $('runStatus').textContent = '분석 중 ' + Math.round(i / days.length * 100) + '%'; await new Promise(r => setTimeout(r, 0)); }
   }
-  RES = { P, ev, days, range: [d0, d1], names: S.nb.map(n => n.name), nbInfo: S.nb.map(n => ({ floors: n.floors, h: n.h })), fac: facadeGeo().map(f => ({ az: f.az, L: f.L })), ms: performance.now() - t0, when: new Date() };
+  RES = { P, ev, days, walls: sc.walls.map(W => ({ rec: W.rec, L: W.L, h: W.h, m: W.m })), range: [d0, d1], names: S.nb.map(n => n.name), nbInfo: S.nb.map(n => ({ floors: n.floors, h: n.h })), fac: facadeGeo().map(f => ({ az: f.az, L: f.L })), ms: performance.now() - t0, when: new Date() };
   STALE = false; RUNNING = false; $('btnRun').disabled = false;
   reaggregate();
   $('runStatus').className = ''; $('runStatus').textContent = '분석 완료 · ' + days.length + '일 × ' + P.minStep + '분 간격 (' + fmt(RES.ms / 1000, 1) + '초)';
@@ -973,7 +1024,7 @@ async function runAnalysis() {
 }
 function reaggregate() {
   if (!RES) return;
-  const P = Object.assign({}, RES.P, { minArea: +S.cfg.minArea, iLow: +S.cfg.iLow, iHigh: +S.cfg.iHigh });
+  const P = Object.assign({}, RES.P, { minArea: +S.cfg.minArea, iLow: +S.cfg.iLow, iHigh: +S.cfg.iHigh, walls: RES.walls, nbInfo: RES.nbInfo, cellW: cellW(), wx: wxFactor(), dailyLim: +S.cfg.dailyLim, annualLim: +S.cfg.annualLim });
   RES.P2 = P;
   const R0map = {}, wwrMap = {};
   S.fac.forEach((f, i) => { R0map[i] = glassById(f.glass).R / 100; wwrMap[i] = f.wwr / 100; });
@@ -987,11 +1038,23 @@ function reaggregate() {
    유리 반사율이 낮으면 같은 경로로 반사돼도 세기가 약해 판정 시간에서 빠짐 */
 function judge(R) {
   if (!R || R.hours <= 0) return { k: 'ok', t: '영향 없음' };
+  if (R.cells) { // 창 단위 판정
+    if (R.cells.over > 0) return { k: 'bad', t: `참고 기준 초과 (창 ${R.cells.over}곳)` };
+    if (R.cells.hit > 0) return { k: 'warn', t: '영향 있음 (기준 이내)' };
+    return { k: 'ok', t: '약한 반사만' };
+  }
   if (R.midH >= +S.cfg.annualLim || R.maxDailyMid >= +S.cfg.dailyLim) return { k: 'bad', t: '참고 기준 초과' };
   if (R.midH > 0) return { k: 'warn', t: '영향 있음 (기준 이내)' };
   return { k: 'ok', t: '약한 반사만' };
 }
-function worstIdx() { if (!RES) return -1; let w = -1, b = 0; RES.ag.rec.forEach((R, i) => { const v = R.midH * 1e4 + R.hours; if (v > b) { b = v; w = i; } }); return w; }
+// 가장 심한 창 설명: 면 방향, 층, 왼쪽부터 몇 번째 칸(그 면을 바깥에서 볼 때), 하루 최대·연간
+function cellTxt(R) {
+  const c = R && R.cells && R.cells.worst; if (!c) return '-';
+  const W = RES.walls[c.w], az = (Math.atan2(W.m[0], W.m[1]) * R2D + 360) % 360;
+  const h = c.hours * wxFactor();
+  return `${dirLabel(az)}면 ${c.fl}층 ${c.col}/${c.ncol}번째 칸 · 하루 최대 ${c.maxDaily}분 · 연 ${fmt(c.hours, 1)}h${wxFactor() < 1 ? ` (날씨 반영 ${fmt(h, 1)}h)` : ''}`;
+}
+function worstIdx() { if (!RES) return -1; let w = -1, b = 0; RES.ag.rec.forEach((R, i) => { const v = (R.cells && R.cells.worst ? R.cells.worst.sc * 1e3 : 0) + R.midH * 1e4 + R.hours; if (v > b) { b = v; w = i; } }); return w; }
 function pickRepresentative() {
   const w = worstIdx(); if (w < 0) return;
   const R = RES.ag.rec[w]; const pk = R.peak || { d: R.maxDay, m: R.minM };
@@ -1010,19 +1073,19 @@ function renderResults() {
   const peakI = Math.max(0, ...recs.map(r => r.maxI));
   $('kpis').innerHTML = [
     ['영향 받는 인접 건물', `${aff}<small>/ ${names.length}개동</small>`, aff ? '반사광이 벽면에 닿는 건물' : '반사광 도달 없음'],
-    ['기준 초과 건물', `${over}<small>개동</small>`, `세기 ${P.iLow} W/㎡ 이상 반사가 일 ${S.cfg.dailyLim}분 또는 연 ${S.cfg.annualLim}시간 이상`],
+    ['기준 초과 건물', `${over}<small>개동</small>`, `창 하나(폭 ${cellW()}m × 1개 층)에 세기 ${P.iLow} W/㎡ 이상 반사가 일 ${S.cfg.dailyLim}분 또는 연 ${S.cfg.annualLim}시간${wxFactor() < 1 ? `(일조율 ${Math.round(wxFactor() * 100)}% 반영)` : ''} 이상`],
     ['최대 연간 현휘 (중 이상)', `${fmt(W ? W.midH : 0, 1)}<small>시간</small>`, W ? esc(names[w]) + ` · 약한 반사 포함 ${fmt(W.hours, 1)}시간` : '-'],
     ['최대 1일 지속', `${fmt(dmax, 0)}<small>분</small>`, dmaxI >= 0 ? esc(names[dmaxI]) + ' · ' + mdStr(y, recs[dmaxI].maxDay) : '-'],
     ['최대 반사 일사강도', `${fmt(peakI, 0)}<small>W/㎡</small>`, '맑은 날 직달일사 × 입사각별 반사율']
   ].map(k => `<div class="kpi"><span>${k[0]}</span><b>${k[1]}</b><em>${k[2]}</em></div>`).join('');
 
   const sevDot = R => R.maxI >= P.iHigh ? 'var(--bad)' : R.maxI >= P.iLow ? 'var(--sun)' : 'var(--warn)';
-  $('resTbl').innerHTML = `<thead><tr><th>건물</th><th>층수·높이</th><th>반사 도달</th><th>중 이상 (연간)</th><th>중 이상 (1일 최대)</th><th>발생 일수</th><th>발생 기간</th><th>시간대</th><th>원인 입면</th><th>최대 강도</th><th>'강' 등급</th><th>판정</th></tr></thead><tbody>` +
+  $('resTbl').innerHTML = `<thead><tr><th>건물</th><th>층수·높이</th><th>반사 도달</th><th>기준 초과 창</th><th>가장 심한 창</th><th>발생 일수</th><th>발생 기간</th><th>시간대</th><th>원인 입면</th><th>최대 강도</th><th>'강' 등급</th><th>판정</th></tr></thead><tbody>` +
     recs.map((R, i) => {
       const j = judge(R), nf = RES.nbInfo[i];
       const top = Object.entries(R.fac).sort((a, b) => b[1] - a[1])[0];
       const fdir = top ? dirLabel(RES.fac[+top[0]].az) + ' 입면' : '-';
-      return `<tr data-r="${i}" class="${i === HEAT_SEL ? 'sel' : ''}"><td class="t">${esc(names[i])}</td><td>${nf.floors}층 · ${fmt(nf.h, 0)}m</td><td>${R.hours ? fmt(R.hours, 1) + ' h' : '-'}</td><td>${R.midH ? fmt(R.midH, 1) + ' h' : '-'}</td><td>${R.maxDailyMid ? R.maxDailyMid + ' 분 <span class="hint">(' + mdStr(y, R.maxDayMid) + ')</span>' : '-'}</td><td>${R.nDaysMid ? R.nDaysMid + ' 일' : (R.nDays ? '<span class="hint">' + R.nDays + ' 일(약)</span>' : '-')}</td><td class="t">${R.first != null ? mdStr(y, R.first) + ' ~ ' + mdStr(y, R.last) : '-'}</td><td>${R.maxM >= 0 ? hhmm(R.minM) + '–' + hhmm(R.maxM + RES.P.minStep) : '-'}</td><td class="t">${fdir}</td><td>${R.maxI ? '<span class="sev" style="background:' + sevDot(R) + '"></span>' + fmt(R.maxI, 0) : '-'}</td><td>${R.strongH ? fmt(R.strongH, 1) + ' h' : '-'}</td><td class="t"><span class="pill ${j.k}">${j.t}</span></td></tr>`;
+      return `<tr data-r="${i}" class="${i === HEAT_SEL ? 'sel' : ''}"><td class="t">${esc(names[i])}</td><td>${nf.floors}층 · ${fmt(nf.h, 0)}m</td><td>${R.hours ? fmt(R.hours, 1) + ' h' : '-'}</td><td>${R.cells ? R.cells.over + ' / ' + R.cells.hit + '곳' : '-'}</td><td class="t">${cellTxt(R)}</td><td>${R.nDaysMid ? R.nDaysMid + ' 일' : (R.nDays ? '<span class="hint">' + R.nDays + ' 일(약)</span>' : '-')}</td><td class="t">${R.first != null ? mdStr(y, R.first) + ' ~ ' + mdStr(y, R.last) : '-'}</td><td>${R.maxM >= 0 ? hhmm(R.minM) + '–' + hhmm(R.maxM + RES.P.minStep) : '-'}</td><td class="t">${fdir}</td><td>${R.maxI ? '<span class="sev" style="background:' + sevDot(R) + '"></span>' + fmt(R.maxI, 0) : '-'}</td><td>${R.strongH ? fmt(R.strongH, 1) + ' h' : '-'}</td><td class="t"><span class="pill ${j.k}">${j.t}</span></td></tr>`;
     }).join('') + '</tbody>';
 
   $('heatSel').innerHTML = `<option value="-1">전체 인접 건물</option>` + names.map((n, i) => `<option value="${i}"${i === HEAT_SEL ? ' selected' : ''}>${esc(n)}</option>`).join('');
@@ -1056,9 +1119,10 @@ function noteLines() {
     const R = recs[w];
     out.push(`적용 유리 ${facTxt} 기준, 인접 건물 ${names.length}개동 중 ${aff.length}개동에 반사광이 도달합니다.`);
     const top = Object.entries(R.fac).sort((a, b) => b[1] - a[1])[0];
+    if (R.cells && R.cells.worst) out.push(`가장 영향이 큰 창은 ${names[w]} ${cellTxt(R)}입니다.`);
     out.push(`영향이 가장 큰 건물은 ${names[w]}로, 세기 ${P.iLow} W/㎡ 이상 반사가 연간 약 ${fmt(R.midH, 1)}시간(${R.nDaysMid}일), 하루 최대 ${R.maxDailyMid}분 발생합니다 (약한 반사 포함 시 ${fmt(R.hours, 1)}시간). 주로 ${mdStr(y, R.first)}~${mdStr(y, R.last)} 사이 ${hhmm(R.minM)}–${hhmm(R.maxM + RES.P.minStep)}에 ${top ? dirLabel(RES.fac[+top[0]].az) + ' 입면' : ''}의 반사가 원인입니다.`);
     const over = aff.filter(a => judge(a[0]).k === 'bad').map(a => names[a[1]]);
-    out.push(over.length ? `참고 기준(세기 ${P.iLow} W/㎡ 이상 반사가 1일 ${S.cfg.dailyLim}분 또는 연 ${S.cfg.annualLim}시간)을 넘는 건물: ${over.join(', ')}.` : `모든 영향 건물이 참고 기준(1일 ${S.cfg.dailyLim}분, 연 ${S.cfg.annualLim}시간) 이내입니다.`);
+    out.push(over.length ? `창 단위 참고 기준(한 창에 세기 ${P.iLow} W/㎡ 이상 반사가 1일 ${S.cfg.dailyLim}분 또는 연 ${S.cfg.annualLim}시간)을 넘는 건물: ${over.join(', ')}.` : `모든 영향 건물이 참고 기준(1일 ${S.cfg.dailyLim}분, 연 ${S.cfg.annualLim}시간) 이내입니다.`);
   }
   const sorted = RES.cmp.slice().sort((a, b) => a.g.R - b.g.R), cc = RES.cmp.find(c => c.g.id === cur.id), lo = sorted[0];
   if (cc && lo && aff.length && lo.g.id !== cc.g.id) {
@@ -1931,7 +1995,7 @@ function buildReport(standalone) {
 <table><tr><th class="l" style="width:22%">대지 위치</th><td class="l">${esc(S.site.addr)} (N ${fmt(S.site.lat, 4)}°, E ${fmt(S.site.lon, 4)}°)</td></tr>
 <tr><th class="l">분석 기간·간격</th><td class="l">${period}, ${S.cfg.dayStep == 1 ? '매일' : S.cfg.dayStep + '일 간격'} · ${S.cfg.minStep}분 간격, 한국표준시(KST)</td></tr>
 <tr><th class="l">태양 위치</th><td class="l">NOAA 천문 알고리즘(대기 굴절 보정), 맑은 날 직달일사 모델(Meinel)</td></tr>
-<tr><th class="l">판단 기준(참고)</th><td class="l">반사 일사 세기 ${S.cfg.iLow} W/㎡ 이상인 반사광이 1일 ${S.cfg.dailyLim}분 또는 연간 ${S.cfg.annualLim}시간 이상 도달 시 '기준 초과' (세기 = 맑은 날 직달일사 × 입사각별 유리 반사율), 최소 영향 면적 ${S.cfg.minArea}㎡</td></tr></table>
+<tr><th class="l">판단 기준(참고)</th><td class="l">인접 건물 벽을 창 단위(폭 ${cellW()}m × 1개 층)로 나눠, 한 창에 반사 일사 세기 ${S.cfg.iLow} W/㎡ 이상인 반사광이 1일 ${S.cfg.dailyLim}분(맑은 날 기준) 또는 연간 ${S.cfg.annualLim}시간${wxFactor() < 1 ? `(서울 평년 일조율 ${Math.round(wxFactor() * 100)}% 반영)` : '(맑은 날 기준)'} 이상 도달하면 '기준 초과'. 해와 10° 이내로 겹치는 반사는 제외, 세기 = 맑은 날 직달일사 × 입사각별 유리 반사율, 최소 영향 면적 ${S.cfg.minArea}㎡</td></tr></table>
 <h2><span>2</span>건축물 및 유리 조건</h2>
 <table><tr><th>지상 층수</th><th>층고</th><th>높이</th><th>기준층 면적</th><th>연면적(계산)</th><th>진북 회전</th></tr>
 <tr class="num"><td>${S.bld.floors}층</td><td>${S.bld.fh} m</td><td>${fmt(bldH(), 1)} m</td><td>${fmt(Math.abs(polyArea(fp)), 1)} ㎡</td><td>${fmt(Math.abs(polyArea(fp)) * S.bld.floors, 0)} ㎡</td><td>${S.bld.rot}°</td></tr></table>
@@ -2071,6 +2135,14 @@ function drawWindows(A, B, f, H, glassCol, op, wallCol, fi) {
   R3.stat.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: glassCol, transparent: true, opacity: Math.min(0.95, op + 0.2), side: THREE.DoubleSide })));
 }
 // 단일 유리 모드: 유리 추가·유리별 비교를 숨김
+// 창 단위·날씨 판정 설정 (다시 계산 없이 바로 반영)
+function bindJudgeCfg() {
+  $('cfgCellW').value = cellW(); $('cfgSunPct').value = S.cfg.sunPct ?? 46; $('cfgUseWx').checked = S.cfg.useWx !== false;
+  const re = () => { save(); if (RES) { reaggregate(); renderResults(); } };
+  $('cfgCellW').onchange = e => { const v = parseFloat(e.target.value); if (isFinite(v) && v >= 1) { S.cfg.cellW = v; re(); } else e.target.value = cellW(); };
+  $('cfgSunPct').onchange = e => { const v = parseFloat(e.target.value); if (isFinite(v) && v > 0) { S.cfg.sunPct = Math.min(100, v); re(); } };
+  $('cfgUseWx').onchange = e => { S.cfg.useWx = e.target.checked; re(); };
+}
 function applySingle() {
   const one = S.single || S.glasses.length <= 1;
   $('btnAddGlass').hidden = !!S.single;
@@ -2087,7 +2159,8 @@ function applySingle() {
   };
   $('bFrontW').onchange = e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return; S.bld.frontWwr = Math.max(0, Math.min(100, v)); applyStyle(); };
   $('bSideW').onchange = e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return; S.bld.sideWwr = Math.max(0, Math.min(100, v)); applyStyle(); };
-  renderStyleUI(); build3D(); applySingle();
+  renderStyleUI(); build3D(); applySingle(); bindJudgeCfg();
+  if (RES && !RES.walls) { RES = null; STALE = true; } // 예전 형식 결과는 다시 분석
 })();
 </script>
 <script>

@@ -222,24 +222,23 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 .srcfac p b { color: var(--ink); }
 .tabs button { padding: 7px 16px; }
 /* ---------- 3D 일조 비교 ---------- */
-.t3 @media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0e1418; --surface: #161f25; --surface-2: #1c262d; --ink: #e3eaee; --muted: #93a3ae;
     --line: #2a3740; --accent: #4fb0b8; --accent-ink: #08201f; --sun: #f0a050; --stage: #0a0f12;
     color-scheme: dark;
   }
-.t3 }
+}
 :root[data-theme="dark"] {
   --bg: #0e1418; --surface: #161f25; --surface-2: #1c262d; --ink: #e3eaee; --muted: #93a3ae;
   --line: #2a3740; --accent: #4fb0b8; --accent-ink: #08201f; --sun: #f0a050; --stage: #0a0f12;
   color-scheme: dark;
 }
 .t3 .app { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; max-width: 1480px; margin: 0 auto; align-items: start; }
-.t3 @media (max-width: 900px) { .app { grid-template-columns: minmax(0, 1fr); }
-.t3 }
+@media (max-width: 900px) { .t3 .app { grid-template-columns: minmax(0, 1fr); } }
 .stage-col { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.t3 @media (min-width: 901px) { .stage-col { position: sticky; top: env(safe-area-inset-top, 0px); }
-.t3 }
+/* 넓은 화면: 스크롤해도 3D 화면이 위에 붙어서 따라옴 */
+@media (min-width: 901px) { .t3 .stage-col { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); z-index: 3; } }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .t3 .seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 3px; gap: 2px; }
 .t3 .seg button { white-space: nowrap; border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 500; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
@@ -252,8 +251,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 button:focus-visible, .t3 input:focus-visible, .t3 select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .t3 .spacer { flex: 1; }
 .t3 .stage { position: relative; background: var(--stage); border-radius: var(--radius); overflow: hidden; height: clamp(320px, 70vh, 780px); }
-.t3 @media (max-width: 900px) { .stage { height: clamp(300px, 58vh, 560px); }
-.t3 }
+@media (max-width: 900px) { .t3 .stage { height: clamp(300px, 58vh, 560px); } }
 .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 .t3 .stage canvas:active { cursor: grabbing; }
 .t3 .split { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
@@ -306,7 +304,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 .colorpick { display: grid; grid-template-columns: minmax(0, 1fr) 40px; gap: 6px; }
 .t3 .colorpick input[type="color"] { width: 40px; height: 32px; border: 1px solid var(--line); border-radius: 6px; padding: 2px; background: var(--surface-2); cursor: pointer; }
 .t3 label.chk { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
-.t3 @media (prefers-reduced-motion: reduce) { * { transition: none !important; }
+@media (prefers-reduced-motion: reduce) { .t3 * { transition: none !important; } }
 .t3 .stage { display: block; padding: 0; min-height: 0; }
 
 </style>
@@ -644,6 +642,12 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
           <option value="0">불러온 주변 전체</option>
         </select>
       </div>
+      <div class="namebox"><span>연간 판정</span>
+        <select id="t3glWx" aria-label="연간 판정 기준">
+          <option value="wx" selected>날씨 반영 (서울 일조율 46%)</option>
+          <option value="clear">맑은 날 기준 (지침 최대치)</option>
+        </select>
+      </div>
       <div class="namebox"><span>기간</span>
         <div class="seg fill" role="group" aria-label="분석 기간">
           <button id="t3glYear" aria-pressed="true">1년</button>
@@ -682,7 +686,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
           </div>
         </div>
       </div>
-      <p class="note">반사광 세기 = 맑은 날 직달일사 × 입사각별 유리 반사율입니다. 세기 100 W/㎡ 이상인 반사가 하루 30분 또는 연 30시간 이상이면 기준 초과로 봅니다(독일 LAI 지침의 판단 관행을 빌린 참고값). 반사 경로는 유리와 상관없이 같고 세기만 반사율에 비례해 달라지므로, 분석 유리를 바꾸면 다시 계산하지 않고 바로 비교됩니다. 반사하는 유리 면적이 1㎡ 미만인 순간은 세지 않습니다. 2021년 대법원(해운대 아이파크) 판결에서 피해 세대의 강한 반사광 일수는 연 31~187일이었습니다. 국내에는 반사율 수치 기준이 아직 없습니다. 이 결과는 설계 초기 검토용 추정이며, 공식 빛반사 영향평가를 대신하지 않습니다.</p>
+      <p class="note">판정은 지침처럼 <b>창 하나 단위</b>입니다. 이웃 벽을 폭 3m × 1개 층 칸으로 나누고, 한 창에 세기 100 W/㎡ 이상인 반사가 맑은 날 하루 30분 또는 연 30시간(날씨 반영을 고르면 서울 평년 일조율 46%를 곱한 기대치) 이상 닿으면 기준 초과입니다(독일 LAI 지침의 판단 관행을 빌린 참고값). 해와 10° 이내로 겹치는 반사, 옥상은 판정에서 빼고, 지상(도로)은 따로 보여 줍니다. 반사광 세기 = 맑은 날 직달일사 × 입사각별 유리 반사율입니다. 반사 경로는 유리와 상관없이 같고 세기만 반사율에 비례해 달라지므로, 분석 유리를 바꾸면 다시 계산하지 않고 바로 비교됩니다. 반사하는 유리 면적이 1㎡ 미만인 순간은 세지 않습니다. 2021년 대법원(해운대 아이파크) 판결에서 피해 세대의 강한 반사광 일수는 연 31~187일이었습니다. 국내에는 반사율 수치 기준이 아직 없습니다. 이 결과는 설계 초기 검토용 추정이며, 공식 빛반사 영향평가를 대신하지 않습니다.</p>
     </div>
 
     <div class="card">
@@ -3194,7 +3198,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 
   /* ---------- 현휘 분석 화면 ---------- */
   var glLiveOn = false;
-  let glSrc = null, glSampleCache = null, glRows = [], glSel = -1, glLiveT = 0, glPeriod = 'year', glSrcNote = '', glLastYear = true, glLastSecs = '', glStep = 15, glScale = 1;
+  let glCells = new Map(), glSrc = null, glSampleCache = null, glRows = [], glSel = -1, glLiveT = 0, glPeriod = 'year', glSrcNote = '', glLastYear = true, glLastSecs = '', glStep = 15, glScale = 1;
   const glViz = new THREE.Group(); scene.add(glViz);
   const glLive = new THREE.Group(); scene.add(glLive);
   function glClearGroup(g) { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); g.clear(); }
@@ -3295,7 +3299,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     return r.join(', ');
   };
   function glInvalidate(why) {
-    glClearGroup(glViz); glRows = []; glSel = -1; glSampleCache = null; glSrc = null; glClearGroup(srcViz); $('srcBox').hidden = true;
+    glClearGroup(glViz); glRows = []; glSel = -1; glSampleCache = null; glSrc = null; glCells = new Map(); glClearGroup(srcViz); $('srcBox').hidden = true;
     if ($('glTable').innerHTML) { $('glTable').innerHTML = ''; $('glSum').textContent = why; $('glCopy').hidden = true; }
     if (glLiveOn) glLiveSoon();
   }
@@ -3346,7 +3350,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     const year = glPeriod === 'year', y0 = curDate().getFullYear();
     const days = year ? Array.from({ length: 37 }, (_, i) => new Date(y0, 0, 1 + i * 10)) : [curDate()];
     const stepMin = year ? 15 : 5, scale = year ? 365 / days.length : 1;
-    const groups = new Map(), srcRec = samples.map(() => []);
+    const groups = new Map(), srcRec = samples.map(() => []), cells = new Map();
     const t0 = performance.now();
     for (let di = 0; di < days.length; di++) {
       const dt = days[di], [rs, ss] = riseSet(dt);
@@ -3354,6 +3358,28 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
         const { alt, az } = sunAt(dt, mins);
         if (alt < 3) continue;
         const sv = sunVec(alt, az), res = GlareEngine.step(samples, [sv.x, sv.y, sv.z], prisms, R0, 700), dniNow = glDNI(alt);
+        // 창 단위 판정용: 반사된 유리 칸이 이웃 벽에 맺히는 범위(칸 크기만큼)를 창 칸(폭 3m × 1개 층)에 표시. 해와 10° 이내 반사는 제외
+        const stepCells = new Map();
+        for (const r of res) {
+          const h = r.hit; if (h.kind !== 'wall') continue;
+          if (-(r.r[0] * sv.x + r.r[1] * sv.y + r.r[2] * sv.z) > GL_COS10) continue;
+          const b = h.b, P2 = b.pts, A = P2[h.edge], B = P2[(h.edge + 1) % P2.length], L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1;
+          const tx = (B[0] - A[0]) / L, tz = (B[1] - A[1]) / L, sAl = (h.p[0] - A[0]) * tx + (h.p[2] - A[1]) * tz, zz = h.y - b.z0;
+          const q = samples[r.si], hu = (q.cw || 3) / 2, hv = (q.ch || 3) / 2, ncol = Math.max(1, Math.ceil(L / GL_CELL_W)), cwid = L / ncol;
+          const c = Math.cos(r.inc * RAD), cwl = !!q.cwl;
+          for (let fl = Math.max(0, Math.floor((zz - hv) / b.flh)); fl <= Math.min(b.floors - 1, Math.floor((zz + hv) / b.flh)); fl++)
+            for (let col = Math.max(0, Math.floor((sAl - hu) / cwid)); col <= Math.min(ncol - 1, Math.floor((sAl + hu) / cwid)); col++) {
+              const key = b.id + '|' + h.edge + '|' + fl + '|' + col;
+              let sc2 = stepCells.get(key);
+              if (!sc2) stepCells.set(key, sc2 = { b, edge: h.edge, fl, col, ncol, cg: 2, cc: 2, d: r.r });
+              if (cwl) sc2.cc = Math.min(sc2.cc, c); else sc2.cg = Math.min(sc2.cg, c);
+            }
+        }
+        for (const [key, v] of stepCells) {
+          let cl = cells.get(key);
+          if (!cl) cells.set(key, cl = { b: v.b, edge: v.edge, fl: v.fl, col: v.col, ncol: v.ncol, d: v.d, recs: [] });
+          cl.recs.push(di, v.cg > 1 ? -1 : v.cg, v.cc > 1 ? -1 : v.cc, dniNow);
+        }
         // 같은 면에 닿는 반사를 모아, 반사하는 유리 면적이 기준(1㎡) 이상일 때만 그 시각을 셈 → 큰 창은 크게, 작은 창은 작게 반영
         const per = new Map();
         for (const r of res) {
@@ -3414,6 +3440,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     });
     glStep = stepMin; glScale = scale;
     glSrc = { samples, srcRec, year };
+    glCells = cells;
     glRender(year, ((performance.now() - t0) / 1000).toFixed(1));
     btn.disabled = false; $('glProg').hidden = true;
   }
@@ -3426,7 +3453,44 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   }
   /* 반사광 세기(W/㎡) = 맑은 날 직달일사 × 입사각별 유리 반사율 (정밀 분석기와 같은 식)
      판정은 세기가 '중'(100 W/㎡) 이상인 반사만 셈: 하루 30분 또는 연 30시간 이상이면 기준 초과 */
-  const GL_I_LOW = 100, GL_I_HIGH = 200, GL_DAY_LIM = 30, GL_YEAR_LIM = 30;
+  const GL_I_LOW = 100, GL_I_HIGH = 200, GL_DAY_LIM = 30, GL_YEAR_LIM = 30, GL_CELL_W = 3, GL_COS10 = Math.cos(10 * Math.PI / 180), GL_SUN = 0.46;
+  const glWx = () => ($('glWx') && $('glWx').value === 'wx') ? GL_SUN : 1; // 연간 판정에 서울 평년 일조율 반영
+  // 창 하나: 세기 '중' 이상 반사가 맑은 날 하루 30분 또는 연 30시간(날씨 반영 시 기대치) 이상이면 기준 초과
+  function cellEval(cl, R0, Rc, year) {
+    let n = 0; const day = new Map();
+    for (let i = 0; i < cl.recs.length; i += 4) {
+      const I = Math.max(cl.recs[i + 1] >= 0 ? fres(cl.recs[i + 1], R0) : 0, cl.recs[i + 2] >= 0 ? fres(cl.recs[i + 2], Rc) : 0) * cl.recs[i + 3];
+      if (I >= GL_I_LOW) { n++; day.set(cl.recs[i], (day.get(cl.recs[i]) || 0) + glStep); }
+    }
+    let md = 0; day.forEach(v => { if (v > md) md = v; });
+    const hours = n * glStep * glScale / 60, over = md >= GL_DAY_LIM || (year && hours * glWx() >= GL_YEAR_LIM);
+    return { n, md, hours, over };
+  }
+  // 면(이웃 건물 벽 하나)의 창 판정 요약
+  function faceCells(key, R0, year) {
+    const Rc = glCwlR(); let hit = 0, over = 0, worst = null;
+    for (const cl of glCells.values()) {
+      if (cl.b.id + '|' + cl.edge !== key) continue;
+      const e = cellEval(cl, R0, Rc, year); if (!e.n) continue;
+      hit++; if (e.over) over++;
+      const sc = (e.over ? 1e9 : 0) + e.md * 1e4 + e.hours;
+      if (!worst || sc > worst.sc) worst = Object.assign({ sc, cl }, e);
+    }
+    return { hit, over, worst };
+  }
+  // 창 위치: 우리 건물 쪽에서 그 면을 볼 때 왼쪽부터 몇 번째 칸
+  function cellPos(cl) {
+    const P2 = cl.b.pts, A = P2[cl.edge], B = P2[(cl.edge + 1) % P2.length], tx = B[0] - A[0], tz = B[1] - A[1];
+    const fromLeft = (tx * cl.d[2] - tz * cl.d[0]) < 0 ? cl.col : cl.ncol - 1 - cl.col; // 보는 사람 오른쪽 = 반사광 방향 기준
+    return `${cl.fl + 1}층 왼쪽에서 ${fromLeft + 1}/${cl.ncol}번째 창`;
+  }
+  // 한 줄(면·옥상·지상)의 판정
+  function rowEval(r, R0, year) {
+    const e = glEval(r.g, R0, year), k = r.g.key;
+    if (r.g.hit.kind !== 'wall') return { e, lvl: e.mid || e.midMin ? 'm' : 'l', fc: null, note: r.g.hit.kind === 'roof' ? '옥상 · 창 판정 제외' : '지상 · 운전자·보행자 기준으로 따로 검토' };
+    const fc = faceCells(k, R0, year);
+    return { e, fc, lvl: fc.over ? 'h' : fc.hit ? 'm' : 'l' };
+  }
   const LVL = { h: '기준 초과', m: '기준 이내', l: '약한 반사만' };
   function glDNI(alt) {
     if (alt <= 0) return 0;
@@ -3454,7 +3518,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   // 유리 A·B(와 최고 반사)를 같은 반사 경로로 비교
   function glCompare(year) {
     if (document.documentElement.dataset.mode === 'glare') return '';
-    const rowsFor = R0 => glRows.map(r => glEval(r.g, R0, year));
+    const rowsFor = R0 => glRows.map(r => Object.assign({}, glEval(r.g, R0, year), { lvl: rowEval(r, R0, year).lvl }));
     const sets = [['A', glass.A.lro / 100, `유리 A ${glass.A.key}`], ['B', glass.B.lro / 100, `유리 B ${glass.B.key}`], ['max', 0.45, '최고 반사 MZT128']].map(([k, R0, nm]) => {
       const ev = rowsFor(R0);
       return { k, R0, nm, over: ev.filter(e => e.lvl === 'h').length, mid: ev.reduce((a, e) => a + (year ? e.midH : e.midMin / 60), 0), maxI: Math.max(0, ...ev.map(e => e.maxI)) };
@@ -3471,16 +3535,19 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     // 지금 고른 유리로 세기·판정을 다시 계산 (다시 분석하지 않음)
     const R0 = glR0();
     glRows.forEach(r => {
-      const e = glEval(r.g, R0, year); r.lvl = e.lvl; r.ev = e;
-      r.amount = (year ? `중 이상(${GL_I_LOW} W/㎡↑) 연 ${e.midH < 1 ? e.midH.toFixed(1) : Math.round(e.midH)}시간 · ${e.midDays}일` : `중 이상 ${e.midMin}분`) + (e.maxDay ? ` · 하루 최대 ${e.maxDay}분` : '') + ` · ${r.reach}`;
+      const ev = rowEval(r, R0, year), e = ev.e, fc = ev.fc, w = fc && fc.worst, wx = glWx();
+      r.lvl = ev.lvl; r.ev = e; r.fc = fc;
+      r.amount = fc
+        ? (fc.hit ? `기준 초과 창 ${fc.over}/${fc.hit}곳` + (w ? ` · 가장 심한 창: ${cellPos(w.cl)} — 하루 최대 ${Math.round(w.md)}분${year ? ` · 연 ${w.hours < 1 ? w.hours.toFixed(1) : Math.round(w.hours)}시간${wx < 1 ? ` (날씨 반영 ${(w.hours * wx).toFixed(1)}시간)` : ''}` : ''}` : '') : `세기 ${GL_I_LOW} W/㎡ 이상 반사가 닿는 창 없음`) + ` · ${r.reach}`
+        : `${ev.note} · ${r.reach}`;
       r.refl = `최대 세기 ${Math.round(e.maxI)} W/㎡ (강 ${GL_I_HIGH}↑ ${year ? (e.strongH < 1 ? e.strongH.toFixed(1) : Math.round(e.strongH)) + '시간' : ''}) · ${r.area}`;
-      r.score = { h: 3, m: 2, l: 1 }[e.lvl] * 1e9 + e.midMin * 1e3 + e.maxI;
+      r.score = { h: 3, m: 2, l: 1 }[ev.lvl] * 1e9 + (fc ? fc.over * 1e6 + fc.hit * 1e3 : 0) + e.maxI;
     });
     glRows.sort((a, b) => b.score - a.score);
     const nB = glRows.filter(r => r.g.hit.kind !== 'ground').length, nH = glRows.filter(r => r.lvl === 'h').length;
     const gname = $('glGlass').selectedOptions[0].textContent;
     $('glSum').innerHTML = glRows.length
-      ? `<b>${nB}곳</b>의 인접 건물 면·옥상${glRows.some(r => r.g.hit.kind === 'ground') ? '과 지상' : ''}에 반사광이 닿습니다. 지금 유리로 <b>기준 초과 ${nH}곳</b>.<br><span>${[glBldNote(), glCompare(year), `${gname} · ${year ? '1년(10일 간격, 15분 단위)' : '선택한 날(5분 단위)'} · ${secs}초`, glSrcNote].filter(Boolean).join('<br>')}</span>`
+      ? `<b>${nB}곳</b>의 인접 건물 면·옥상${glRows.some(r => r.g.hit.kind === 'ground') ? '과 지상' : ''}에 반사광이 닿습니다. 지금 유리로 <b>기준 초과 ${nH}개 면 · 창 ${glRows.reduce((a, r) => a + (r.fc ? r.fc.over : 0), 0)}곳</b>.<br><span>${[glBldNote(), glCompare(year), `${gname} · ${year ? '1년(10일 간격, 15분 단위)' : '선택한 날(5분 단위)'} · ${secs}초`, `판정: 창 단위(폭 ${GL_CELL_W}m × 1개 층) · 해와 10° 이내 반사 제외 · 옥상 제외 · 지상 별도 · 연간 기준 ${glWx() < 1 ? '날씨 반영(서울 일조율 46%)' : '맑은 날'}`, glSrcNote].filter(Boolean).join('<br>')}</span>`
       : `반사광이 인접 건물에 닿지 않습니다.<br><span>${gname} · ${year ? '1년' : '선택한 날'}<br>${glSrcNote}</span>`;
     $('glTable').innerHTML = glRows.slice(0, 40).map((r, i) => `
       <button class="glrow" data-i="${i}" aria-pressed="false">
@@ -3494,7 +3561,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     $('glTable').querySelectorAll('.glrow').forEach(b => b.onclick = () => glSelect(+b.dataset.i));
     // 3D 표시: 닿는 곳에 색 점 (노랑 → 빨강 = 반사율 높음)
     const pos = [], col = [], c = new THREE.Color(), weak = new THREE.Color('#9aa5ad'), lo = new THREE.Color('#ffd23f'), hi = new THREE.Color('#e8452c');
-    glRows.forEach(r => r.g.pts.forEach(p => {
+    glDrawCells(R0, year);
+    glRows.forEach(r => r.g.hit.kind !== 'wall' && r.g.pts.forEach(p => {
       const I = ptI(p, R0, glCwlR()); pos.push(p[0], p[1], p[2]);
       if (I < GL_I_LOW) c.copy(weak).lerp(lo, I / GL_I_LOW * 0.5); else c.copy(lo).lerp(hi, Math.min(1, (I - GL_I_LOW) / (GL_I_HIGH - GL_I_LOW + 100)));
       col.push(c.r, c.g, c.b);
@@ -3507,6 +3575,24 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     glSel = -1;
     glToVw();
     $('srcBox').hidden = !glSrc; srcDraw3D(); if (!$('srcModal').hidden) srcRender();
+  }
+  // 이웃 벽 창 칸에 색: 빨강 = 기준 초과, 주황 = 기준 이내(세기 '중' 이상 반사 있음)
+  function glDrawCells(R0, year) {
+    const Rc = glCwlR(), pos = [], col = [], cO = new THREE.Color('#d93a2b'), cM = new THREE.Color('#f0a030');
+    for (const cl of glCells.values()) {
+      const e = cellEval(cl, R0, Rc, year); if (!e.n) continue;
+      const c = e.over ? cO : cM, b = cl.b, P2 = b.pts, A = P2[cl.edge], B = P2[(cl.edge + 1) % P2.length];
+      const L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, tx = (B[0] - A[0]) / L, tz = (B[1] - A[1]) / L, cw = L / cl.ncol;
+      // 바깥 방향(반사광이 들어온 쪽)으로 살짝 띄움
+      let nx = tz, nz = -tx; if (nx * cl.d[0] + nz * cl.d[2] > 0) { nx = -nx; nz = -nz; }
+      const s0 = cl.col * cw + 0.15, s1 = (cl.col + 1) * cw - 0.15, y0 = b.z0 + cl.fl * b.flh + 0.2, y1 = b.z0 + (cl.fl + 1) * b.flh - 0.2;
+      const V = (s, y) => [A[0] + tx * s + nx * 0.2, y, A[1] + tz * s + nz * 0.2];
+      for (const v of [V(s0, y0), V(s1, y0), V(s1, y1), V(s0, y0), V(s1, y1), V(s0, y1)]) { pos.push(...v); col.push(c.r, c.g, c.b); }
+    }
+    if (!pos.length) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    glViz.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })));
   }
   function glToVw() {
     if (!vwReady) return;
@@ -3562,6 +3648,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   $('glLive').onchange = e => { glLiveOn = e.target.checked; $('glLiveMsg').hidden = !glLiveOn; glLiveDraw(); };
   $('glGlass').onchange = () => { if (glLiveOn) glLiveDraw(); if (glRows.length) glRender(glLastYear, glLastSecs); };
   $('glRad').onchange = () => { glInvalidate('분석 반경을 바꿨습니다. 다시 분석해 주세요.'); };
+  $('glWx').onchange = () => { if (glRows.length) glRender(glLastYear, glLastSecs); };
   document.addEventListener('glass-pick', () => glFillGlass());
   $('glCopy').onclick = () => {
     const txt = ['판정\t대상\t면·층\t시기·시간대\t영향\t세기\t원인'].concat(glRows.map(r => [LVL[r.lvl], r.title, r.face, r.when, r.amount, r.refl, r.src].join('\t'))).join('\n');
@@ -4047,8 +4134,9 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 html[data-mode="glare"] .topbar .tabs, html[data-mode="glare"] #viewPhoto,
 html[data-mode="glare"] #t3chipA, html[data-mode="glare"] #t3chipB, html[data-mode="glare"] #t3split, html[data-mode="glare"] #t3cardB { display: none !important; }
 /* 오른쪽 설정 칸을 2열로: 넓은 화면에선 3D 옆, 중간 화면에선 3D 아래 */
-html[data-mode="glare"] .topbar { max-width: 1840px; }
-html[data-mode="glare"] .t3 .app { max-width: 1840px; grid-template-columns: minmax(0, 1fr) minmax(0, 780px); }
+html[data-mode="glare"] .topbar { max-width: none; }
+html[data-mode="glare"] .t3 .app { max-width: none; grid-template-columns: minmax(0, 1fr) clamp(640px, 46vw, 1000px); }
+html[data-mode="glare"] .t3 .stage { height: min(78vh, 900px); }
 html[data-mode="glare"] .t3 .panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 html[data-mode="glare"] .t3 .pcol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 @media (max-width: 1280px) {
