@@ -2075,7 +2075,7 @@ function buildReport(standalone) {
 <table><tr><th>입면(방위)</th><th>길이</th><th>유리 비율</th><th class="l">적용 유리</th><th>외부 반사율</th></tr>
 ${fg.map(f => { const fc = S.fac[f.i], g = glassById(fc.glass); return `<tr><td>${dirLabel(f.az)} (${fmt(f.az, 0)}°)</td><td class="num">${fmt(f.L, 1)} m</td><td class="num">${fc.wwr}%</td><td class="l">${esc(g.name)}</td><td class="num">${g.R}%</td></tr>`; }).join('')}</table>`;
   // 맨 마지막 장: 판정 기준 요약 (중요한 내용만 6줄)
-  const critSum = (n) => `<h2 class="pb"><span>${n}</span>판정 기준 요약</h2>
+  const critSum = (n, pb = true) => `<h2 class="${pb ? 'pb' : ''}"><span>${n}</span>판정 기준 요약</h2>
 <ul>
 <li><b>판정 단위</b> — 인접 건물 벽을 창 하나(폭 ${cellW()}m × 1개 층) 단위로 나눠 창마다 판정합니다.</li>
 <li><b>반사 세기</b> — 맑은 날 직달일사 × 입사각별 유리 반사율이며, ${S.cfg.iLow} W/㎡ 이상인 반사만 판정에 넣습니다.</li>
@@ -2099,8 +2099,9 @@ ${fg.map(f => { const fc = S.fac[f.i], g = glassById(fc.glass); return `<tr><td>
   } else {
     const affIdx = recs.map((r, i) => i).filter(i => recs[i].hours > 0).sort((a, b) => recs[b].hours - recs[a].hours);
     const none = recs.map((r, i) => i).filter(i => !recs[i].hours).map(i => names[i]);
-    const detail = scope === 'all' ? `<h2 class="pb"><span>8</span>동별 상세 분석</h2><p class="note">반사광이 닿는 ${affIdx.length}개동을 연간 현휘 시간이 긴 순서로 정리했습니다.${none.length ? ' 영향 없음: ' + esc(none.join(', ')) + '.' : ''}</p>` + affIdx.map((i, k) => bldSection(i, '8-' + (k + 1))).join('') : '';
-    const n0 = scope === 'all' ? 9 : 8;
+    // 순서: 요약·결과 → 저감 방안 → 가정·한계 → 판정 기준 요약 → 동별 상세 분석(맨 뒤)
+    const n0 = S.glasses.length > 1 ? 8 : 7, nD = n0 + 3;
+    const detail = scope === 'all' ? `<h2 class="pb"><span>${nD}</span>동별 상세 분석</h2><p class="note">반사광이 닿는 ${affIdx.length}개동을 연간 현휘 시간이 긴 순서로 정리했습니다.${none.length ? ' 영향 없음: ' + esc(none.join(', ')) + '.' : ''}</p>` + affIdx.map((i, k) => bldSection(i, nD + '-' + (k + 1))).join('') : '';
     body = `<div class="rep">${head}${overview}
 <h2><span>3</span>배치 및 모델</h2>
 <div class="figs"><div><img src="${planImg}" alt="배치도"><p class="cap">배치도 · ${mdStr(y, S.t.doy)} ${hhmm(S.t.min)} 반사광(주황), 점선 원은 최대 영향 거리 ${S.cfg.maxDist}m</p></div>
@@ -2117,10 +2118,10 @@ ${S.glasses.length > 1 ? `<h2><span>7</span>유리 반사율별 비교</h2>
 <table><tr><th class="l">유리</th><th>외부 반사율</th><th>최대 반사 강도</th><th>'중' 이상 시간</th><th class="l">'강' 등급 시간 (≥${P.iHigh} W/㎡)</th></tr>
 ${RES.cmp.slice().sort((a, b) => a.g.R - b.g.R).map(c => `<tr${c.g.id === S.defGlass ? ' style="background:#fdf3e6"' : ''}><td class="l">${esc(c.g.name)}${c.g.id === S.defGlass ? ' (적용)' : ''}</td><td class="num">${c.g.R}%</td><td class="num">${fmt(c.maxI, 0)} W/㎡</td><td class="num">${fmt(c.mid, 1)}h</td><td class="l"><span class="bar"><i style="width:${Math.max(1, c.strong / mx * 220)}px"></i><span class="num">${fmt(c.strong, 1)}h</span></span></td></tr>`).join('')}</table>
 <p class="note">형상과 배치가 같으면 반사광이 닿는 시간은 유리 종류와 무관하게 같고, 반사 강도만 달라집니다. 시간 값은 전체 인접 건물 합계입니다.</p>` : ''}
-${detail}
-${mitSec(n0, scope === 'all' ? 'pb' : '')}
+${mitSec(n0, 'pb')}
 ${limits(n0 + 1)}
-${critSum(n0 + 2)}
+${critSum(n0 + 2, false)}
+${detail}
 </div>`;
   }
   if (!standalone) { $('repView').innerHTML = `<style>${REP_CSS}</style>` + body; return body; }
