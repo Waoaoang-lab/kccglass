@@ -220,6 +220,19 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 .srcpair canvas { width: 100%; display: block; border-radius: 4px; }
 .t3 .srcfac p { margin: 0; font-size: 12px; color: var(--muted); }
 .t3 .srcfac p b { color: var(--ink); }
+.t3 .card h2 .critbtn { margin-left: auto; padding: 3px 10px; font-size: 12px; font-weight: 500; letter-spacing: 0; }
+.t3 .critwin { max-width: 860px; }
+.t3 .crit { font-size: 13.5px; line-height: 1.65; }
+.t3 .crit h3 { margin: 6px 0 0; font-size: 14px; }
+.t3 .crit p, .t3 .crit ul { margin: 0; }
+.t3 .crit ul { padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.t3 .crit .critlead { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.t3 .srcbody > * { flex-shrink: 0; } /* 스크롤 칸 안에서 표가 0 높이로 눌리지 않게 */
+.t3 .crit .tablewrap { overflow-x: auto; }
+.t3 .crit table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.t3 .crit th, .t3 .crit td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+.t3 .crit th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
+.t3 .crit a { color: var(--accent); }
 .tabs button { padding: 7px 16px; }
 /* ---------- 3D 일조 비교 ---------- */
 @media (prefers-color-scheme: dark) {
@@ -320,7 +333,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     <label for="siteQ">현장 주소</label>
     <input type="text" id="siteQ" placeholder="도로명·지번 주소 (예: 서울 강남구 도산대로 101)">
     <button class="btn primary" type="submit">찾기</button>
-    <span class="sitelabel" id="siteLabel">현재: 서울 (기본값)</span>
+    <span class="sitelabel" id="siteLabel">현재: 강남대로 587 (기본값)</span>
     <span class="sitemsg" id="siteMsg"></span>
   </form>
 </div>
@@ -602,7 +615,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     </div>
 
     <div class="card">
-      <h2><span class="tag sun">☀</span>해 위치 (<span id="t3siteName">서울</span>)</h2>
+      <h2><span class="tag sun">☀</span>해 위치 (<span id="t3siteName">강남대로 587</span>)</h2>
       <div class="namebox"><span>날짜</span><input type="date" id="t3date"></div>
       <div class="field"><span>시각</span><input type="range" id="t3time" min="300" max="1230" step="5" value="840"><output id="t3timeO">14:00</output></div>
       <div class="row">
@@ -631,7 +644,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     <div class="card" id="t3cardB"></div>
 
     <div class="card" id="t3glCard">
-      <h2><span class="tag sun">!</span>반사 눈부심(현휘) 분석</h2>
+      <h2><span class="tag sun">!</span>반사 눈부심(현휘) 분석<button class="btn critbtn" id="t3critOpen" type="button">판정 기준</button></h2>
       <p class="note">유리에 비친 햇빛이 인접 건물의 어느 면, 몇 층에, 1년 중 언제 닿는지 계산합니다. 실제 주변을 켜면 실제 이웃 건물로 분석합니다.</p>
       <div class="namebox"><span>분석 유리</span><select id="t3glGlass" aria-label="분석할 유리"></select></div>
       <div class="namebox"><span>분석 반경</span>
@@ -668,6 +681,67 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
         <label class="chk"><input type="checkbox" id="t3srcOn"> 우리 건물에 반사 발생 부위 표시</label>
         <button class="btn" id="t3srcOpen" type="button">발생 부위 입면도 · 개선 효과 비교</button>
       </div>
+      <div class="srcmodal" id="t3critModal" hidden role="dialog" aria-modal="true" aria-labelledby="t3critTitle">
+        <div class="srcwin critwin">
+          <div class="srcbar"><b id="t3critTitle">현휘 판정 기준</b><span class="spacer"></span><button class="btn primary" id="t3critClose" type="button">닫기</button></div>
+          <div class="srcbody crit">
+            <p class="critlead">인접 건물 벽을 <b>창 하나(폭 3m × 1개 층)</b> 단위로 나누고, 한 창에 <b>세기 100 W/㎡ 이상</b>인 반사광이 <b>맑은 날 하루 30분</b> 또는 <b>연 30시간</b>(서울 일조율 46% 반영 기대치) 이상 닿으면 <b>참고 기준 초과</b>로 봅니다. 국내 법정 기준이 아닌 참고값입니다.</p>
+            <h3>판정 조건</h3>
+            <div class="tablewrap"><table>
+              <tr><th>항목</th><th>기본값</th><th>설명</th></tr>
+              <tr><td>판정 단위</td><td>창 하나 (폭 3m × 1개 층)</td><td>이웃 벽을 이 크기 칸으로 나눠 칸마다 판정. 칸 하나라도 넘으면 그 면은 기준 초과</td></tr>
+              <tr><td>반사 세기 하한</td><td>100 W/㎡</td><td>이보다 약한 반사는 판정 시간에 넣지 않음</td></tr>
+              <tr><td>하루 기준</td><td>30분</td><td>맑은 날 기준 (지침 최대치)</td></tr>
+              <tr><td>연간 기준</td><td>30시간</td><td>기본은 서울 평년 일조율 46%를 곱한 기대치. "맑은 날 기준"으로 바꿀 수 있음</td></tr>
+              <tr><td>제외</td><td>해와 10° 이내 반사</td><td>관찰자 시야에 해가 이미 있어 반사로 인한 추가 눈부심으로 보지 않음</td></tr>
+              <tr><td>제외</td><td>옥상</td><td>사람이 머무는 창이 아니어서 판정에서 뺌 (결과에는 참고로 표시)</td></tr>
+              <tr><td>별도</td><td>지상 (도로·보행자)</td><td>운전자 시선 기준이 따로 있어 판정과 분리</td></tr>
+              <tr><td>최소 영향 면적</td><td>1㎡</td><td>반사하는 유리 면적이 이보다 작은 순간은 세지 않음</td></tr>
+            </table></div>
+            <p><b>판정 표시</b> — 기준 초과: 기준을 넘는 창이 1곳 이상 · 기준 이내: 100 W/㎡ 이상 반사가 닿는 창은 있으나 기준 이내 · 약한 반사만: 100 W/㎡ 이상 반사가 닿는 창이 없음</p>
+            <h3>반사광 세기</h3>
+            <p><b>세기(W/㎡) = 맑은 날 직달일사 × 입사각별 유리 반사율.</b> 직달일사는 맑은 날 모델(Meinel 식 + Kasten-Young 대기질량), 입사각별 반사율은 Schlick 근사로 계산하며 비스듬히 비칠수록 커집니다. 기준 반사율은 KCC 코팅유리 물성 DATA의 외부 반사율(24mm 복층, 비강화)입니다.</p>
+            <div class="tablewrap"><table>
+              <tr><th>유리 (외부 반사율)</th><th>반사 세기 (해 고도 40°, 입사각 40°)</th></tr>
+              <tr><td>저반사 로이 (7%)</td><td>59 W/㎡</td></tr>
+              <tr><td>MCT148 (9%)</td><td>76 W/㎡</td></tr>
+              <tr><td>MCT155 (18%)</td><td>152 W/㎡</td></tr>
+              <tr><td>고반사 (32%)</td><td>270 W/㎡</td></tr>
+              <tr><td>MZT128 (45%)</td><td>379 W/㎡</td></tr>
+            </table></div>
+            <p>해 고도 20°, 입사각 70°처럼 매우 비스듬하면 7% 유리도 약 121 W/㎡까지 올라갑니다.</p>
+            <h3>분석 조건</h3>
+            <ul>
+              <li>현장 주소의 위도·경도로 태양 위치 계산</li>
+              <li>주변 건물: 브이월드 건물통합정보의 실제 윤곽과 지상 층수 (높이 = 층수 × 3.4m), 분석 반경 기본 50m</li>
+              <li>지형: 브이월드 실사 화면이 열려 있으면 건물별 지반고 반영, 아니면 평지 가정</li>
+              <li>기간: 간이 분석 1년 10일 간격·15분 단위, 정밀 분석기 기본 매일·10분 단위</li>
+              <li>우리 건물: 고른 입면 형식, 층고, 창 크기, 멀리언 간격·두께, 옹벽 마감이 그대로 반영됨</li>
+            </ul>
+            <h3>기준의 출처</h3>
+            <ul>
+              <li><b>하루 30분 · 연 30시간</b>: 독일 LAI(주 정부 환경위원회) 빛공해 지침의 반사광 눈부심 판단 관행. 특정 지점(창) 기준, 매일 맑다고 가정한 최대치, 해와 10° 이내 반사 제외가 전제입니다. <a href="https://pasewalk.de/wp-content/uploads/2024/06/11-Blendgutachten.pdf" target="_blank" rel="noopener">독일 눈부심 평가서 예시</a></li>
+              <li><b>100 W/㎡ 세기 하한</b>: 반사율이 다른 유리를 구분해 판정하려고 이 프로그램에서 정한 참고값입니다.</li>
+              <li><b>서울 일조율 46%</b>: 연 평균 일조시간 2,143시간 기준. <a href="https://en.wikipedia.org/wiki/Climate_of_Seoul" target="_blank" rel="noopener">서울 기후</a></li>
+              <li><b>국내</b>: 유리 반사에 대한 수치 기준은 없습니다. 법원은 시간, 밝기, 지역 특성 등을 종합해 참을 수 있는 한도를 넘었는지 판단합니다.</li>
+            </ul>
+            <h3>결과를 설명할 때</h3>
+            <ul>
+              <li>"현휘가 없어진다"고 표현하지 않습니다. 해가 거울처럼 비치는 순간에는 반사율 7% 유리도 매우 밝습니다(해의 상 약 1억 cd/㎡).</li>
+              <li>반사광이 닿는 <b>경로와 시간은 유리와 상관없이 같고</b>, 저반사 유리는 <b>세기를 반사율에 비례해 낮춰</b> 기준을 넘는 창을 줄입니다.</li>
+              <li>저반사 유리의 "기준 초과 0곳" 결과는 100 W/㎡ 세기 하한에 따른 것이므로, 자료에 판정 조건을 함께 적습니다.</li>
+              <li>큰 유리면이 가까운 이웃을 마주 보면 일반 유리는 초과가 나오는 것이 정상입니다. 해가 움직이는 동안 한 창에 반사가 1~2시간 머무는 실제 현상입니다.</li>
+            </ul>
+            <h3>한계</h3>
+            <ul>
+              <li>유리를 거울 반사로만 계산합니다. 마감재의 확산 반사, 유리 패널의 휨·왜곡은 반영하지 않습니다.</li>
+              <li>결과는 반사 세기와 시간입니다. 관찰 지점별 휘도(cd/㎡), 불능현휘 판정은 하지 않습니다.</li>
+              <li>이웃 건물은 윤곽 × 층수 높이의 단순 형태이며, 창 위치는 3m 칸으로 가정합니다.</li>
+              <li>설계 초기 검토와 유리 비교용 추정이며, 공식 빛반사 영향평가를 대신하지 않습니다.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
       <div class="srcmodal" id="t3srcModal" hidden role="dialog" aria-modal="true" aria-labelledby="t3srcTitle">
         <div class="srcwin">
           <div class="srcbar">
@@ -691,7 +765,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 
     <div class="card">
       <h2>참고</h2>
-      <p class="note">해 위치는 현장 위치(기본값 서울, 북위 37.57° 동경 126.98°) 기준 계산값입니다. 유리의 색은 KCC 컬러 인덱스의 외관 색상이고, 반사 밝기는 외부 반사율, 유리 너머 실내 밝기는 가시광 투과율로 계산합니다. 물성은 KCC 코팅유리 물성 DATA의 24mm 복층(6mm 코팅 + 12A + 6mm 투명, 비강화) 값이며, 해가 지면 실내 조명이 켜진 상태로 바뀝니다. 그래프 막대는 투과율·SHGC는 그대로, 반사율은 50%를 끝으로 그렸습니다. 실시간 화면이라 렌더링 프로그램 수준의 사실감은 아니며, 유리 간 비교 용도입니다.</p>
+      <p class="note">해 위치는 현장 위치(기본값 서울 서초구 강남대로 587) 기준 계산값입니다. 유리의 색은 KCC 컬러 인덱스의 외관 색상이고, 반사 밝기는 외부 반사율, 유리 너머 실내 밝기는 가시광 투과율로 계산합니다. 물성은 KCC 코팅유리 물성 DATA의 24mm 복층(6mm 코팅 + 12A + 6mm 투명, 비강화) 값이며, 해가 지면 실내 조명이 켜진 상태로 바뀝니다. 그래프 막대는 투과율·SHGC는 그대로, 반사율은 50%를 끝으로 그렸습니다. 실시간 화면이라 렌더링 프로그램 수준의 사실감은 아니며, 유리 간 비교 용도입니다.</p>
     </div>
   </aside>
 </div>
@@ -1921,7 +1995,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   let btype = 'off';
 
   /* ---------- 태양 위치 (서울, KST) ---------- */
-  let LAT = 37.5665, LON = 126.978; const RAD = Math.PI / 180;
+  let LAT = 37.5163, LON = 127.0203; const RAD = Math.PI / 180; // 기본 현장: 서울 서초구 강남대로 587 부근
   function solarBase(date) {
     const n = Math.round((date - new Date(date.getFullYear(), 0, 0)) / 864e5);
     const decl = 23.44 * Math.sin(2 * Math.PI * (284 + n) / 365) * RAD;
@@ -3773,6 +3847,10 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       </section>`).join('') || '<p class="note">표시할 입면이 없습니다.</p>';
     requestAnimationFrame(() => $('srcGrid').querySelectorAll('canvas').forEach(cv => srcDrawFacade(cv, shown[+cv.dataset.k], cv.dataset.v === '1' ? v1 : v2, year)));
   }
+  $('critOpen').onclick = () => { $('critModal').hidden = false; };
+  $('critClose').onclick = () => { $('critModal').hidden = true; };
+  $('critModal').addEventListener('click', e => { if (e.target === $('critModal')) $('critModal').hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('critModal').hidden) $('critModal').hidden = true; });
   $('srcOn').onchange = srcDraw3D;
   $('srcOpen').onclick = () => { $('srcModal').hidden = false; srcRender(); };
   $('srcClose').onclick = () => { $('srcModal').hidden = true; };
@@ -3935,7 +4013,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   const N = naver.maps, RAD = Math.PI / 180;
   $('siteBar').hidden = false; $('svOpenIn').hidden = false; $('t3siteCard').hidden = false;
 
-  const site = { lat: 37.5665, lng: 126.978, label: '서울 (기본값)' };
+  const site = { lat: 37.5163, lng: 127.0203, label: '강남대로 587 (기본값)' };
   const LL = () => new N.LatLng(site.lat, site.lng);
   const offset = (e, n) => new N.LatLng(site.lat + n / 111320, site.lng + e / (111320 * Math.cos(site.lat * RAD)));
 
@@ -4030,6 +4108,9 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     if (pano) pano.setPosition(LL());
   }
   window.__siteFromOutside = setSite;
+  // 홈페이지를 열면 기본 현장(강남대로 587)을 바로 검색해 실제 좌표·주변 건물을 불러옴
+  if (!$('siteQ').value) $('siteQ').value = '서울특별시 서초구 강남대로 587';
+  setTimeout(() => { if (!authFailed) $('siteBar').requestSubmit(); }, 400);
   $('siteBar').addEventListener('submit', e => {
     e.preventDefault();
     const q = $('siteQ').value.trim(); if (!q) return;
