@@ -179,6 +179,27 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 .glprog i { display: block; height: 100%; width: 0; background: var(--sun); transition: width .2s; }
 .t3 .glsum { margin: 0; font-size: 13px; }
 .t3 .glsum:empty { display: none; }
+.t3 .glmit { border: 2px solid var(--accent); border-radius: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); display: grid; gap: 8px; }
+.t3 .glmit h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.t3 .glmit h3 i { font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 4px; padding: 1px 7px; }
+.t3 .glmit .lead { margin: 0; font-size: 13.5px; font-weight: 600; line-height: 1.6; }
+.t3 .glmit .tw { overflow-x: auto; }
+.t3 .glmit table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.t3 .glmit th, .t3 .glmit td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; vertical-align: middle; }
+.t3 .glmit td:first-child { white-space: normal; line-height: 1.35; min-width: 120px; }
+.t3 .glmit th { white-space: normal; vertical-align: bottom; line-height: 1.3; }
+.t3 .glmit th, .t3 .glmit td { padding: 5px 4px; }
+.t3 .glmit td em { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 3px; padding: 0 4px; white-space: nowrap; }
+.t3 .glmit tr.cur td em { background: #c47a12; }
+.t3 .glmit th { color: var(--muted); font-weight: 600; }
+.t3 .glmit th:first-child, .t3 .glmit td:first-child { text-align: left; }
+.t3 .glmit tr.cur td { background: color-mix(in srgb, #f0a030 16%, transparent); }
+.t3 .glmit tr.best td { background: color-mix(in srgb, var(--accent) 16%, transparent); font-weight: 600; }
+.t3 .glmit small { color: var(--muted); font-weight: 500; }
+.t3 .glmit td button { font: inherit; font-size: 11.5px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--accent); background: var(--surface); color: var(--accent); cursor: pointer; }
+.t3 .glmit td button:hover { background: var(--accent); color: var(--accent-ink); }
+.t3 .glmit .ft { margin: 0; font-size: 11.5px; color: var(--muted); }
+.t3 .glmit ul { margin: 0; padding-left: 18px; font-size: 12px; display: grid; gap: 2px; }
 .t3 .glsum span { font-size: 11.5px; color: var(--muted); }
 .t3 .gllist { display: flex; flex-direction: column; gap: 6px; max-height: 520px; overflow-y: auto; }
 .t3 .gllist:empty { display: none; }
@@ -277,6 +298,19 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
 .t3 .chip.b { right: 10px; }
 .t3 .clock { position: absolute; left: 10px; bottom: 10px; color: #fff; background: rgba(12,18,22,.62); border-radius: 5px; padding: 5px 9px; font-family: var(--font-mono); font-size: 12px; line-height: 1.4; pointer-events: none; font-variant-numeric: tabular-nums; }
 .t3 .compass { position: absolute; right: 10px; bottom: 10px; width: 56px; height: 56px; pointer-events: none; }
+.t3 .heatleg { position: absolute; left: 10px; top: 44px; z-index: 2; display: grid; gap: 3px; max-width: 230px; padding: 8px 10px; border-radius: 6px; background: rgba(12,18,22,.72); color: #fff; font-size: 11.5px; line-height: 1.35; pointer-events: none; }
+.t3 .heatleg b { font-size: 12px; margin-bottom: 2px; }
+.t3 .heatleg .hl { display: flex; align-items: center; gap: 7px; font-variant-numeric: tabular-nums; }
+.t3 .heatleg .hl i { width: 16px; height: 10px; border-radius: 2px; flex: none; }
+.t3 .heatleg .hl.ov i { background: transparent; box-shadow: inset 0 0 0 2px #ff2a1a; }
+.t3 .heatleg .hlft { margin-top: 3px; color: rgba(255,255,255,.75); }
+.t3 .heatinfo { position: absolute; right: 10px; top: 44px; z-index: 2; max-width: min(320px, calc(100% - 20px)); padding: 9px 30px 9px 11px; border-radius: 6px; background: rgba(12,18,22,.85); color: #fff; font-size: 12px; line-height: 1.5; }
+.t3 .heatinfo .bad { color: #ff8a7a; font-weight: 700; }
+.t3 .heatinfo .ok { color: #9be39b; font-weight: 700; }
+.t3 .heatinfo button { position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: #fff; font-size: 16px; cursor: pointer; }
+.t3 .heatinfo button:hover { background: rgba(255,255,255,.15); }
+html[data-mode="glare"] .t3 .heatleg, html[data-mode="glare"] .t3 .heatinfo { top: 10px; }
+@media (max-width: 600px) { .t3 .heatleg { max-width: 170px; font-size: 10.5px; } }
 .t3 .loading { position: absolute; inset: 0; display: grid; place-items: center; color: #cfd9de; font-size: 13px; text-align: center; padding: 20px; }
 .t3 .hint { color: var(--muted); font-size: 13px; }
 .t3 .hint b { color: var(--ink); font-weight: 600; }
@@ -505,6 +539,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
         </button>
       </div>
       <div class="clock" id="t3clock"></div>
+      <div class="heatleg" id="t3heatLeg" hidden></div>
+      <div class="heatinfo" id="t3heatInfo" hidden></div>
       <svg class="compass" viewBox="-30 -30 60 60" aria-hidden="true">
         <circle r="26" fill="rgba(12,18,22,.55)"/>
         <g id="t3compassRot">
@@ -661,6 +697,14 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
           <option value="clear">맑은 날 기준 (지침 최대치)</option>
         </select>
       </div>
+      <div class="namebox"><span>3D 표시</span>
+        <select id="t3glHeat" aria-label="이웃 건물 3D 표시">
+          <option value="mid" selected>창별 반사 시간 · 세기 100 W/㎡ 이상</option>
+          <option value="all">창별 반사 시간 · 모든 반사</option>
+          <option value="judge">창별 판정 (초과·이내)</option>
+          <option value="off">표시 안 함</option>
+        </select>
+      </div>
       <div class="namebox"><span>기간</span>
         <div class="seg fill" role="group" aria-label="분석 기간">
           <button id="t3glYear" aria-pressed="true">1년</button>
@@ -675,6 +719,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
       <div class="glprog" id="t3glProg" hidden><i></i></div>
       <p class="glsum" id="t3glSum"></p>
       <div class="gllist" id="t3glTable"></div>
+      <div class="glmit" id="t3glMit" hidden></div>
       <button class="btn" id="t3glCopy" type="button" hidden>결과 표 복사</button>
       <button class="btn" id="t3glDeep" type="button" hidden>정밀 분석·검토서로 열기</button>
       <div class="srcbox" id="t3srcBox" hidden>
@@ -3274,6 +3319,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   var glLiveOn = false;
   let glCells = new Map(), glSrc = null, glSampleCache = null, glRows = [], glSel = -1, glLiveT = 0, glPeriod = 'year', glSrcNote = '', glLastYear = true, glLastSecs = '', glStep = 15, glScale = 1;
   const glViz = new THREE.Group(); scene.add(glViz);
+  const glHeat = new THREE.Group(), glHeatSel = new THREE.Group(); scene.add(glHeat, glHeatSel);
+  let glHeatMesh = null, glHeatList = [], glHeatPickI = -1, glHeatYear = true;
   const glLive = new THREE.Group(); scene.add(glLive);
   function glClearGroup(g) { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); g.clear(); }
   function glR0() {
@@ -3373,7 +3420,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     return r.join(', ');
   };
   function glInvalidate(why) {
-    glClearGroup(glViz); glRows = []; glSel = -1; glSampleCache = null; glSrc = null; glCells = new Map(); glClearGroup(srcViz); $('srcBox').hidden = true;
+    glClearGroup(glViz); glClearGroup(glHeat); glClearGroup(glHeatSel); glHeatMesh = null; glHeatList = []; $('heatLeg').hidden = true; $('heatInfo').hidden = true; $('glMit').hidden = true; glRows = []; glSel = -1; glSampleCache = null; glSrc = null; glCells = new Map(); glClearGroup(srcViz); $('srcBox').hidden = true;
     if ($('glTable').innerHTML) { $('glTable').innerHTML = ''; $('glSum').textContent = why; $('glCopy').hidden = true; }
     if (glLiveOn) glLiveSoon();
   }
@@ -3636,6 +3683,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     // 3D 표시: 닿는 곳에 색 점 (노랑 → 빨강 = 반사율 높음)
     const pos = [], col = [], c = new THREE.Color(), weak = new THREE.Color('#9aa5ad'), lo = new THREE.Color('#ffd23f'), hi = new THREE.Color('#e8452c');
     glDrawCells(R0, year);
+    glMitRender(year);
     glRows.forEach(r => r.g.hit.kind !== 'wall' && r.g.pts.forEach(p => {
       const I = ptI(p, R0, glCwlR()); pos.push(p[0], p[1], p[2]);
       if (I < GL_I_LOW) c.copy(weak).lerp(lo, I / GL_I_LOW * 0.5); else c.copy(lo).lerp(hi, Math.min(1, (I - GL_I_LOW) / (GL_I_HIGH - GL_I_LOW + 100)));
@@ -3650,23 +3698,182 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
     glToVw();
     $('srcBox').hidden = !glSrc; srcDraw3D(); if (!$('srcModal').hidden) srcRender();
   }
-  // 이웃 벽 창 칸에 색: 빨강 = 기준 초과, 주황 = 기준 이내(세기 '중' 이상 반사 있음)
-  function glDrawCells(R0, year) {
-    const Rc = glCwlR(), pos = [], col = [], cO = new THREE.Color('#d93a2b'), cM = new THREE.Color('#f0a030');
-    for (const cl of glCells.values()) {
-      const e = cellEval(cl, R0, Rc, year); if (!e.n) continue;
-      const c = e.over ? cO : cM, b = cl.b, P2 = b.pts, A = P2[cl.edge], B = P2[(cl.edge + 1) % P2.length];
-      const L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, tx = (B[0] - A[0]) / L, tz = (B[1] - A[1]) / L, cw = L / cl.ncol;
-      // 바깥 방향(반사광이 들어온 쪽)으로 살짝 띄움
-      let nx = tz, nz = -tx; if (nx * cl.d[0] + nz * cl.d[2] > 0) { nx = -nx; nz = -nz; }
-      const s0 = cl.col * cw + 0.15, s1 = (cl.col + 1) * cw - 0.15, y0 = b.z0 + cl.fl * b.flh + 0.2, y1 = b.z0 + (cl.fl + 1) * b.flh - 0.2;
-      const V = (s, y) => [A[0] + tx * s + nx * 0.2, y, A[1] + tz * s + nz * 0.2];
-      for (const v of [V(s0, y0), V(s1, y0), V(s1, y1), V(s0, y0), V(s1, y1), V(s0, y1)]) { pos.push(...v); col.push(c.r, c.g, c.b); }
+  // 이웃 건물 창 칸마다 반사광이 닿는 시간을 색 단계로 칠함 (빨간 테두리 = 참고 기준 초과)
+  const HEAT_EDGES = year => year ? [1, 5, 10, 20, 30] : [5, 10, 20, 30, 60];
+  const heatBin = (v, year) => { if (v <= 0) return -1; const e = HEAT_EDGES(year); let k = 0; while (k < e.length && v > e[k]) k++; return k; };
+  const heatMode = () => $('glHeat') ? $('glHeat').value : 'mid';
+  // 칸 하나의 통계: thr 이상 세기의 반사만 셈
+  function cellStat(cl, R0, Rc, thr) {
+    let n = 0, maxI = 0; const day = new Map();
+    for (let i = 0; i < cl.recs.length; i += 4) {
+      const I = Math.max(cl.recs[i + 1] >= 0 ? fres(cl.recs[i + 1], R0) : 0, cl.recs[i + 2] >= 0 ? fres(cl.recs[i + 2], Rc) : 0) * cl.recs[i + 3];
+      if (I > maxI) maxI = I;
+      if (I >= thr && I > 0) { n++; day.set(cl.recs[i], (day.get(cl.recs[i]) || 0) + glStep); }
     }
-    if (!pos.length) return;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    glViz.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })));
+    let md = 0; day.forEach(v => { if (v > md) md = v; });
+    return { n, md, hours: n * glStep * glScale / 60, days: Math.round(day.size * glScale), maxI };
+  }
+  function cellFrame(cl) {
+    const b = cl.b, P2 = b.pts, A = P2[cl.edge], B = P2[(cl.edge + 1) % P2.length];
+    const L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, tx = (B[0] - A[0]) / L, tz = (B[1] - A[1]) / L;
+    let nx = tz, nz = -tx; if (nx * cl.d[0] + nz * cl.d[2] > 0) { nx = -nx; nz = -nz; } // 바깥(반사광이 들어온 쪽)
+    return { A, tx, tz, nx, nz, cw: L / cl.ncol };
+  }
+  function cellQuad(f, b, col, fl, off, pad) {
+    const s0 = col * f.cw + pad, s1 = (col + 1) * f.cw - pad, y0 = b.z0 + fl * b.flh + pad, y1 = b.z0 + (fl + 1) * b.flh - pad;
+    const V = (s, y) => [f.A[0] + f.tx * s + f.nx * off, y, f.A[1] + f.tz * s + f.nz * off];
+    return [V(s0, y0), V(s1, y0), V(s1, y1), V(s0, y1)];
+  }
+  function glDrawCells(R0, year) {
+    glClearGroup(glHeat); glHeatMesh = null; glHeatList = []; glHeatYear = year;
+    const mode = heatMode(), leg = $('heatLeg');
+    if (mode === 'off' || !glCells.size) { leg.hidden = true; heatInfo(-1); return; }
+    const Rc = glCwlR(), wx = glWx(), thr = mode === 'all' ? 0 : GL_I_LOW;
+    const pos = [], col = [], line = [], grid = [], faces = new Map(), c = new THREE.Color();
+    const cO = new THREE.Color('#d93a2b'), cM = new THREE.Color('#f0a030');
+    for (const cl of glCells.values()) {
+      const st = cellStat(cl, R0, Rc, thr); if (!st.n) continue;
+      const ev = cellEval(cl, R0, Rc, year), v = year ? st.hours * wx : st.md;
+      if (mode === 'judge') { if (!ev.n) continue; c.copy(ev.over ? cO : cM); }
+      else c.set(SRC_COL[Math.max(0, heatBin(v, year))]);
+      const f = cellFrame(cl), q = cellQuad(f, cl.b, cl.col, cl.fl, 0.22, 0.12);
+      for (const p of [q[0], q[1], q[2], q[0], q[2], q[3]]) { pos.push(...p); col.push(c.r, c.g, c.b); }
+      if (ev.over && mode !== 'judge') { const o = cellQuad(f, cl.b, cl.col, cl.fl, 0.3, 0.06); for (let k = 0; k < 4; k++) line.push(...o[k], ...o[(k + 1) % 4]); }
+      const fk = cl.b.id + '|' + cl.edge; if (!faces.has(fk)) faces.set(fk, { cl, f, used: new Set() });
+      faces.get(fk).used.add(cl.fl * 1000 + cl.col);
+      glHeatList.push({ cl, st, ev, v });
+    }
+    // 반사광이 닿는 면은 나머지 창 칸도 옅게 그려 위치를 읽기 쉽게
+    faces.forEach(({ cl, f, used }) => {
+      for (let fl = 0; fl < cl.b.floors; fl++) for (let k = 0; k < cl.ncol; k++) {
+        if (used.has(fl * 1000 + k)) continue;
+        const q = cellQuad(f, cl.b, k, fl, 0.18, 0.12); grid.push(...q[0], ...q[1], ...q[2], ...q[0], ...q[2], ...q[3]);
+      }
+    });
+    if (grid.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(grid, 3));
+      glHeat.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xdfe6ea, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })));
+    }
+    if (pos.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      glHeatMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false }));
+      glHeat.add(glHeatMesh);
+    }
+    if (line.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(line, 3));
+      glHeat.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xff2a1a, transparent: true, depthWrite: false })));
+    }
+    heatLegend(mode, year, wx);
+    heatInfo(-1);
+  }
+  function heatLegend(mode, year, wx) {
+    const leg = $('heatLeg'), n = glHeatList.length, nOver = glHeatList.filter(h => h.ev.over).length;
+    if (!n) { leg.hidden = false; leg.innerHTML = `<b>이웃 건물 창</b><span>${mode === 'all' ? '반사광이 닿는 창이 없습니다.' : `세기 ${GL_I_LOW} W/㎡ 이상 반사가 닿는 창이 없습니다.`}</span>`; return; }
+    let rows;
+    if (mode === 'judge') rows = `<span class="hl"><i style="background:#d93a2b"></i>참고 기준 초과</span><span class="hl"><i style="background:#f0a030"></i>기준 이내 (세기 ${GL_I_LOW} W/㎡ 이상 반사 있음)</span>`;
+    else {
+      const e = HEAT_EDGES(year), u = year ? '시간' : '분';
+      const lab = [`${e[0]}${u} 이하`].concat(e.slice(1).map((x, i) => `${e[i]}~${x}${u}`), [`${e[e.length - 1]}${u} 초과`]);
+      rows = lab.map((t, i) => `<span class="hl"><i style="background:${SRC_COL[i]}"></i>${t}</span>`).reverse().join('') + `<span class="hl ov"><i></i>참고 기준 초과 창</span>`;
+    }
+    const what = mode === 'judge' ? '판정' : `${year ? '연간 반사 시간' + (wx < 1 ? ' (날씨 반영)' : ' (맑은 날)') : '하루 반사 시간'} · ${mode === 'all' ? '모든 반사' : `세기 ${GL_I_LOW} W/㎡ 이상`}`;
+    leg.hidden = false;
+    leg.innerHTML = `<b>이웃 건물 창 · ${what}</b>${rows}<span class="hlft">창 ${n}곳에 닿음 · 기준 초과 ${nOver}곳<br>칸을 누르면 자세한 수치</span>`;
+  }
+  function heatInfo(i) {
+    glHeatPickI = i; glClearGroup(glHeatSel);
+    const box = $('heatInfo');
+    if (i < 0 || !glHeatList[i]) { box.hidden = true; return; }
+    const { cl, st, ev } = glHeatList[i], b = cl.b, f = cellFrame(cl), q = cellQuad(f, b, cl.col, cl.fl, 0.36, 0.02), yr = glHeatYear;
+    const ln = []; for (let k = 0; k < 4; k++) ln.push(...q[k], ...q[(k + 1) % 4]);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(ln, 3));
+    glHeatSel.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true })));
+    const fmtH = h => h < 1 ? h.toFixed(1) : Math.round(h), wx = glWx();
+    const bld = `${dirName(azOf(b.cx, b.cz))}쪽 ${Math.round(Math.hypot(b.cx, b.cz))}m · 지상 ${b.floors}층 건물`;
+    const lines = [
+      `<b>${bld}</b>`,
+      `${dirName(azOf(f.nx, f.nz))}쪽 면 · ${cellPos(cl)}`,
+      yr ? `반사 도달 연 약 ${st.days}일 · ${fmtH(st.hours)}시간${wx < 1 ? ` (날씨 반영 ${fmtH(st.hours * wx)}시간)` : ''}` : `반사 도달 ${st.n * glStep}분`,
+      `하루 최대 ${Math.round(st.md)}분 · 최대 세기 ${Math.round(st.maxI)} W/㎡`,
+      `<span class="${ev.over ? 'bad' : 'ok'}">${ev.over ? '참고 기준 초과' : ev.n ? '기준 이내' : `세기 ${GL_I_LOW} W/㎡ 미만 (판정 대상 아님)`}</span>`
+    ];
+    box.innerHTML = lines.join('<br>') + `<button type="button" aria-label="닫기">×</button>`;
+    box.querySelector('button').onclick = () => heatInfo(-1);
+    box.hidden = false;
+  }
+  {
+    const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let down = null;
+    const cv = renderer.domElement;
+    cv.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+    cv.addEventListener('pointerup', e => {
+      if (!down || !glHeatMesh || e.button !== 0) { down = null; return; }
+      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null;
+      if (moved > 5 || dt > 600) return; // 끌어서 돌린 것은 무시
+      const r = cv.getBoundingClientRect();
+      ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      const hit = ray.intersectObject(glHeatMesh, false)[0];
+      if (hit) heatInfo(Math.floor(hit.faceIndex / 2)); else if (glHeatPickI >= 0) heatInfo(-1);
+    });
+  }
+  /* ---------- 저감 방안: 저반사 로이유리로 바꾸면 ---------- */
+  // 후보: KCC 로이 제품 중 외부 반사율 13% 이하 (반사율 낮은 순, 같으면 투과율 높은 순)
+  const LOWR_MAX = 13;
+  function lowAlts(curR) {
+    const seen = new Set();
+    return PRESETS.map((p, i) => Object.assign({ i }, p)).filter(p => /LOW-E/.test(p.cat) && p.lro <= LOWR_MAX && p.lro < curR && !seen.has(p.key) && seen.add(p.key))
+      .sort((a, b) => a.lro - b.lro || b.lt - a.lt);
+  }
+  function glMitStats(R0, year) {
+    const Rc = glCwlR(), ob = new Set(); let overC = 0, hitC = 0, maxI = 0;
+    for (const cl of glCells.values()) {
+      const e = cellEval(cl, R0, Rc, year); if (e.n) hitC++; if (e.over) { overC++; ob.add(cl.b.id); }
+      for (let i = 0; i < cl.recs.length; i += 4) { const I = Math.max(cl.recs[i + 1] >= 0 ? fres(cl.recs[i + 1], R0) : 0, cl.recs[i + 2] >= 0 ? fres(cl.recs[i + 2], Rc) : 0) * cl.recs[i + 3]; if (I > maxI) maxI = I; }
+    }
+    return { overC, hitC, overB: ob.size, maxI };
+  }
+  let glMitPrev = null; // 적용해 보기 전 유리 (되돌리기용)
+  function glMitApply(i) {
+    let k = $('glGlass').value; if (k === 'max') { k = 'A'; $('glGlass').value = 'A'; }
+    if (i < 0) { if (!glMitPrev) return; i = glMitPrev.i; k = glMitPrev.k; glMitPrev = null; }
+    else if (!glMitPrev) glMitPrev = { k, i: glass[k].preset };
+    const sel = $('prod' + k); if (!sel) return;
+    sel.value = i; sel.dispatchEvent(new Event('change'));
+    $('glGlass').value = k;
+    if (glRows.length) glRender(glLastYear, glLastSecs);
+  }
+  function glMitRender(year) {
+    const box = $('glMit');
+    if (!glCells.size || !glRows.length) { box.hidden = true; return; }
+    const v = $('glGlass').value, R0 = glR0(), curR = Math.round(R0 * 100);
+    const curName = v === 'max' ? 'MZT128' : `${glass[v].series} ${glass[v].key}`;
+    const c = glMitStats(R0, year), alts = lowAlts(curR).slice(0, 4).map(p => Object.assign({ p }, glMitStats(p.lro / 100, year)));
+    const best = alts.slice().sort((a, b) => a.overC - b.overC || a.overB - b.overB || a.hitC - b.hitC || b.p.lro - a.p.lro)[0];
+    const pc = (a, b) => a > 0 ? Math.round((1 - b / a) * 100) : 0, I0 = Math.round(c.maxI);
+    let lead;
+    if (!best) lead = `지금 유리 ${curName}(${curR}%)는 이미 KCC 저반사 로이유리 수준(외부 반사율 ${LOWR_MAX}% 이하)이어서, 더 낮출 유리가 없습니다.`;
+    else {
+      const to = `${best.p.series} ${best.p.key}(${best.p.lro}%)`, I1 = Math.round(best.maxI);
+      lead = !c.hitC
+        ? `지금 유리로도 세기 ${GL_I_LOW} W/㎡ 이상 반사가 닿는 창이 없습니다. 저반사 로이유리 ${to}로 바꾸면 최대 반사 세기가 ${I0} → ${I1} W/㎡로 ${pc(I0, I1)}% 더 낮아집니다.`
+        : `지금 유리 ${curName}(${curR}%)를 저반사 로이유리 ${to}로 바꾸면 기준 초과 창 ${c.overC}곳 → ${best.overC}곳(${pc(c.overC, best.overC)}% 감소), 기준 초과 건물 ${c.overB}동 → ${best.overB}동, 최대 반사 세기 ${I0} → ${I1} W/㎡(${pc(I0, I1)}% 감소)로 줄어듭니다.${c.overC && !best.overC ? ' 참고 기준을 넘는 창이 모두 사라집니다.' : ''}`;
+    }
+    const row = (key, ser, R, lt, x, cls, btn) => `<tr class="${cls}"><td><b>${key}</b> ${R}%${cls === 'cur' ? ' <em>지금</em>' : cls === 'best' ? ' <em>추천</em>' : ''}<br><small>${ser} · 투과 ${lt}%</small></td><td>${x.overC}곳</td><td>${x.overB}동</td><td>${Math.round(x.maxI)}</td><td>${btn}</td></tr>`;
+    const curKey = v === 'max' ? 'MZT128' : glass[v].key, curSer = v === 'max' ? 'CULLINAN SILVER' : glass[v].series, curLt = v === 'max' ? 23 : glass[v].lt;
+    const table = `<div class="tw"><table><thead><tr><th>유리 · 외부 반사율</th><th>초과 창</th><th>초과 동</th><th>최대 W/㎡</th><th></th></tr></thead><tbody>` +
+      row(curKey, curSer, curR, curLt, c, 'cur', glMitPrev ? '<button type="button" data-i="-1">되돌리기</button>' : '') +
+      alts.map(a => row(a.p.key, a.p.series, a.p.lro, a.p.lt, a, a === best ? 'best' : '', `<button type="button" data-i="${a.p.i}">적용</button>`)).join('') + '</tbody></table></div>';
+    const others = [
+      '영향이 몰리는 입면에만 저반사 로이유리를 적용해도 효과가 크고, 비용 증가를 줄일 수 있습니다.',
+      '저층 이웃 건물로 낮게 내려가는 반사는 해당 입면 하부에 세라믹 프릿(도트)이나 수평 루버를 더해 반사 면적을 줄입니다.',
+      '입면을 3~5° 기울이거나 수직으로 분절하면 반사 방향이 하늘 쪽으로 바뀝니다(설계 변경 필요).'
+    ];
+    box.innerHTML = `<h3><i>저감 방안</i>저반사 로이유리로 바꾸면</h3><p class="lead">${lead}</p>${alts.length ? table : ''}
+      <p class="ft">반사광이 닿는 경로·시간은 같고 세기만 외부 반사율에 비례해 줄어듭니다. 다시 분석하지 않고 같은 결과로 다시 집계한 값입니다${glCwlR() ? ` (커튼월룩 ${Math.round(glCwlR() * 100)}%는 그대로)` : ''}. '적용'을 누르면 건물 유리와 3D 색이 그 유리 기준으로 바뀝니다.</p>
+      <ul>${others.map(t => `<li>${t}</li>`).join('')}</ul>`;
+    box.querySelectorAll('td button').forEach(b => b.onclick = () => glMitApply(+b.dataset.i));
+    box.hidden = false;
   }
   function glToVw() {
     if (!vwReady) return;
@@ -3723,6 +3930,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
   $('glGlass').onchange = () => { if (glLiveOn) glLiveDraw(); if (glRows.length) glRender(glLastYear, glLastSecs); };
   $('glRad').onchange = () => { glInvalidate('분석 반경을 바꿨습니다. 다시 분석해 주세요.'); };
   $('glWx').onchange = () => { if (glRows.length) glRender(glLastYear, glLastSecs); };
+  $('glHeat').onchange = () => { if (glRows.length) glDrawCells(glR0(), glLastYear); };
   document.addEventListener('glass-pick', () => glFillGlass());
   $('glCopy').onclick = () => {
     const txt = ['판정\t대상\t면·층\t시기·시간대\t영향\t세기\t원인'].concat(glRows.map(r => [LVL[r.lvl], r.title, r.face, r.when, r.amount, r.refl, r.src].join('\t'))).join('\n');
@@ -3970,6 +4178,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-
         const Rc = val('resCwlR'), Re = Math.round((stats.Ag * x.R + stats.Ac * Rc) / (stats.Ag + stats.Ac) * 10) / 10;
         return Object.assign({}, x, { name: `${x.name} + 커튼월룩 ${Rc}% (면적 가중)`, R: Re });
       }),
+      // 저감 방안 비교용 KCC 저반사 로이유리 (분석기가 지금 유리보다 낮은 것만 씀)
+      alts: lowAlts(100).map(p => ({ id: 'alt' + p.key, name: `KCC ${p.series} ${p.key}`, R: stats.Ac ? Math.round((stats.Ag * p.lro + stats.Ac * val('resCwlR')) / (stats.Ag + stats.Ac) * 10) / 10 : p.lro, lt: p.lt })),
       defGlass: gsel,
       view: `${vwOpen ? '브이월드 실사' : '3D'} · ${$('siteName').textContent}`,
       single: document.documentElement.dataset.mode === 'glare',

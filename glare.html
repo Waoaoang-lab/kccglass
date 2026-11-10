@@ -147,6 +147,18 @@ table.res tbody tr:hover td{background:var(--sunk)}
 .bar .v{font-family:var(--f-num);text-align:right;font-size:12px}
 .bar.cur .lbl{font-weight:600}
 .notes{margin:0;padding-left:18px;display:grid;gap:4px}
+.mitcard{border:2px solid var(--glass);background:linear-gradient(var(--glass-soft),var(--panel) 120px)}
+.mitcard h3{display:flex;align-items:center;gap:8px}
+.mittag{font-size:12px;font-weight:700;color:#fff;background:var(--glass);border-radius:4px;padding:2px 8px}
+.mitlead{font-size:15px;font-weight:600;line-height:1.6;margin:6px 0 10px;color:var(--ink)}
+.mitsub{font-size:13px;margin:14px 0 6px}
+.mittbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.mittbl th,.mittbl td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:center;white-space:nowrap}
+.mittbl th{color:var(--muted);font-weight:600}.mittbl .l{text-align:left}.mittbl .num{font-family:var(--f-num)}
+.mittbl tr.cur td{background:var(--sun-soft)}.mittbl tr.best td{background:var(--glass-soft);font-weight:600}
+.mittbl small{font-weight:500;color:var(--muted)}
+.mbar{display:inline-block;width:80px;height:8px;background:var(--sunk);border-radius:2px;margin-right:6px;vertical-align:middle;overflow:hidden}
+.mbar i{display:block;height:100%;background:var(--bad)}
 .months{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;align-items:end;height:140px}
 .months div{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;height:100%;min-width:0}
 .months i{display:block;width:70%;background:var(--glass);border-radius:2px 2px 0 0;min-height:1px}
@@ -431,6 +443,14 @@ table.res tbody tr:hover td{background:var(--sunk)}
         </div>
       </div>
       <div class="card"><h3>검토 의견</h3><ul class="notes" id="notes"></ul></div>
+      <div class="card mitcard" id="mitCard">
+        <div class="head"><h3><span class="mittag">저감 방안</span>저반사 로이유리로 바꾸면</h3><span class="hint">같은 형상·같은 시간, 유리 반사율만 교체</span></div>
+        <p class="mitlead" id="mitLead"></p>
+        <div class="scroll" id="mitTbl"></div>
+        <p class="hint" id="mitNote"></p>
+        <h4 class="mitsub">그 밖의 저감 방안</h4>
+        <ul class="notes" id="mitList"></ul>
+      </div>
     </div>
   </section>
 
@@ -1033,6 +1053,8 @@ function reaggregate() {
     const a = aggregate(RES.ev, RES.names.length, P, null, g.R / 100, wwrMap);
     return { g, rec: a.rec, over: a.rec.filter(r => judge(r).k === 'bad').length, strong: a.rec.reduce((s, r) => s + r.strongH, 0), mid: a.rec.reduce((s, r) => s + r.midH, 0), maxI: Math.max(0, ...a.rec.map(r => r.maxI)), hours: a.rec.reduce((s, r) => s + r.hours, 0) };
   });
+  // 저감 방안: 저반사 로이유리로 바꿨을 때 (같은 반사 경로, 반사율만 교체)
+  RES.mit = altGlasses().map(g => ({ g, rec: aggregate(RES.ev, RES.names.length, P, null, g.R / 100, wwrMap).rec }));
 }
 /* 판정: 반사광 세기가 '중'(기본 100 W/㎡) 이상인 시간만 셈.
    유리 반사율이 낮으면 같은 경로로 반사돼도 세기가 약해 판정 시간에서 빠짐 */
@@ -1054,6 +1076,45 @@ function cellTxt(R) {
   const h = c.hours * wxFactor();
   return `${dirLabel(az)}면 ${c.fl}층 ${c.col}/${c.ncol}번째 칸 · 하루 최대 ${c.maxDaily}분 · 연 ${fmt(c.hours, 1)}h${wxFactor() < 1 ? ` (날씨 반영 ${fmt(h, 1)}h)` : ''}`;
 }
+/* ===== 저감 방안: 저반사 로이유리 교체 효과 ===== */
+// 바꿔 볼 유리: 홈페이지에서 넘겨준 KCC 저반사 로이유리, 없으면 유리 목록에서 지금보다 반사율 낮은 것
+function altGlasses() {
+  const cur = glassById(S.defGlass), seen = new Set();
+  const list = S.alts && S.alts.length ? S.alts : S.glasses.filter(g => g.id !== cur.id);
+  return list.filter(g => g.R < cur.R && !seen.has(g.name) && seen.add(g.name)).sort((a, b) => a.R - b.R || (b.lt || 0) - (a.lt || 0)).slice(0, 5);
+}
+// rec 배열 요약 (only: 한 동만)
+function mitSum(rec, only) {
+  const rs = only == null ? rec : [rec[only]];
+  return { overB: rs.filter(r => judge(r).k === 'bad').length, overC: rs.reduce((a, r) => a + (r.cells ? r.cells.over : 0), 0), hitC: rs.reduce((a, r) => a + (r.cells ? r.cells.hit : 0), 0),
+    mid: rs.reduce((a, r) => a + r.midH, 0), maxI: Math.max(0, ...rs.map(r => r.maxI)), dMax: Math.max(0, ...rs.map(r => r.maxDailyMid || 0)) };
+}
+function mitData(only) {
+  if (!RES || !RES.mit) return null;
+  const facG = [...new Set(S.fac.map(f => f.glass))].map(glassById), cur = glassById(S.defGlass);
+  const c = mitSum(RES.ag.rec, only), alts = RES.mit.map(m => Object.assign({ g: m.g }, mitSum(m.rec, only)));
+  const best = alts.slice().sort((a, b) => a.overC - b.overC || a.overB - b.overB || a.mid - b.mid || b.g.R - a.g.R)[0] || null;
+  return { cur, curName: facG.map(g => `${g.name}(${g.R}%)`).join(', '), c, alts, best };
+}
+const redPct = (a, b) => a > 0 ? Math.round((1 - b / a) * 100) : 0;
+function mitHeadline(M) {
+  if (!M) return '';
+  const { c, best } = M, iL = S.cfg.iLow;
+  if (!best) return `적용 유리 ${M.curName}보다 외부 반사율이 낮은 비교 유리가 없습니다. 반사율이 더 낮은 KCC 로이유리를 고르면 같은 경로의 반사 세기가 반사율에 비례해 약해집니다.`;
+  const to = `${best.g.name}(${best.g.R}%)`;
+  if (!c.hitC && !c.overB && !c.mid) return `적용 유리 ${M.curName}로도 세기 ${iL} W/㎡ 이상 반사가 닿는 창이 없습니다. ${to}로 바꾸면 최대 반사 세기가 ${fmt(c.maxI, 0)} → ${fmt(best.maxI, 0)} W/㎡로 ${redPct(c.maxI, best.maxI)}% 더 낮아집니다.`;
+  return `적용 유리 ${M.curName}를 ${/저반사/.test(best.g.name) ? '' : '저반사 로이유리 '}${to}로 바꾸면 기준 초과 창이 ${c.overC}곳 → ${best.overC}곳(${redPct(c.overC, best.overC)}% 감소), 기준 초과 건물이 ${c.overB}동 → ${best.overB}동으로 줄고, 세기 ${iL} W/㎡ 이상 반사 시간은 ${fmt(c.mid, 1)} → ${fmt(best.mid, 1)}시간(${redPct(c.mid, best.mid)}% 감소), 최대 반사 세기는 ${fmt(c.maxI, 0)} → ${fmt(best.maxI, 0)} W/㎡(${redPct(c.maxI, best.maxI)}% 감소)로 낮아집니다.` + (c.overC > 0 && best.overC === 0 ? ' 참고 기준을 넘는 창이 모두 사라집니다.' : '');
+}
+// 표: 적용 유리 + 바꿔 볼 유리. rep = 검토서용(밝은 색 고정)
+function mitTable(M, rep) {
+  if (!M) return '';
+  const lt = M.alts.some(a => a.g.lt != null), mx = Math.max(1, M.c.overC, ...M.alts.map(a => a.overC));
+  const row = (name, R, ltv, x, cur) => `<tr class="${cur ? 'cur' : x === M.best ? 'best' : ''}"><td class="l">${esc(name)}${cur ? ' <small>(적용)</small>' : x === M.best ? ' <small>(추천)</small>' : ''}</td><td class="num">${R}%</td>${lt ? `<td class="num">${ltv != null ? ltv + '%' : '-'}</td>` : ''}<td class="l"><span class="mbar"><i style="width:${x.overC / mx * 100}%"></i></span><span class="num">${x.overC}곳</span></td><td class="num">${x.overB}동</td><td class="num">${fmt(x.mid, 1)}h</td><td class="num">${fmt(x.maxI, 0)}</td><td class="num">${cur ? '-' : (M.c.overC ? '−' + redPct(M.c.overC, x.overC) + '%' : '-')}</td></tr>`;
+  const curG = M.cur;
+  return `<table class="mittbl"><thead><tr><th class="l">유리</th><th>외부 반사율</th>${lt ? '<th>가시광 투과율</th>' : ''}<th class="l">기준 초과 창</th><th>기준 초과 건물</th><th>세기 ${S.cfg.iLow}↑ 반사 시간</th><th>최대 세기 W/㎡</th><th>초과 창 감소</th></tr></thead><tbody>` +
+    row(M.curName.replace(/\(\d+%\)/, ''), curG.R, curG.lt, M.c, true) + M.alts.map(a => row(a.g.name, a.g.R, a.g.lt, a, false)).join('') + `</tbody></table>`;
+}
+const MIT_NOTE = '반사광이 닿는 경로·시간은 유리와 상관없이 같고, 세기만 외부 반사율에 비례해 달라집니다. 같은 형상·같은 시간으로 다시 집계한 값이며, 반사 시간은 인접 건물 합계입니다. 유리를 바꿀 때는 가시광 투과율·열 성능(SHGC·U값)·색감을 함께 확인합니다.';
 function worstIdx() { if (!RES) return -1; let w = -1, b = 0; RES.ag.rec.forEach((R, i) => { const v = (R.cells && R.cells.worst ? R.cells.worst.sc * 1e3 : 0) + R.midH * 1e4 + R.hours; if (v > b) { b = v; w = i; } }); return w; }
 function pickRepresentative() {
   const w = worstIdx(); if (w < 0) return;
@@ -1124,6 +1185,7 @@ function noteLines() {
     const over = aff.filter(a => judge(a[0]).k === 'bad').map(a => names[a[1]]);
     out.push(over.length ? `창 단위 참고 기준(한 창에 세기 ${P.iLow} W/㎡ 이상 반사가 1일 ${S.cfg.dailyLim}분 또는 연 ${S.cfg.annualLim}시간)을 넘는 건물: ${over.join(', ')}.` : `모든 영향 건물이 참고 기준(1일 ${S.cfg.dailyLim}분, 연 ${S.cfg.annualLim}시간) 이내입니다.`);
   }
+  if (aff.length && S.glasses.length <= 1) { const M = mitData(); if (M && M.best) out.push('[저감 효과] ' + mitHeadline(M)); }
   const sorted = RES.cmp.slice().sort((a, b) => a.g.R - b.g.R), cc = RES.cmp.find(c => c.g.id === cur.id), lo = sorted[0];
   if (cc && lo && aff.length && lo.g.id !== cc.g.id) {
     const red = cc.strong > 0 ? (1 - lo.strong / cc.strong) * 100 : 0;
@@ -1135,13 +1197,19 @@ function mitigations() {
   const recs = RES.ag.rec, out = [];
   const facCount = {}; recs.forEach(R => Object.entries(R.fac).forEach(([f, c]) => { facCount[f] = (facCount[f] || 0) + c; }));
   const topF = Object.entries(facCount).sort((a, b) => b[1] - a[1]).slice(0, 2).map(e => dirLabel(RES.fac[+e[0]].az) + ' 입면');
-  if (topF.length) out.push(`영향이 집중되는 ${topF.join('·')}에 한해 저반사 로이 유리로 바꾸면 비용 증가를 최소화하면서 반사 강도를 낮출 수 있습니다.`);
+  const M = mitData();
+  if (topF.length) out.push(`영향이 집중되는 ${topF.join('·')}에만 ${M && M.best ? M.best.g.name + '(' + M.best.g.R + '%) 같은 ' : ''}저반사 로이유리를 적용해도 효과가 크고, 비용 증가를 줄일 수 있습니다.`);
   out.push('반사광이 낮은 각도로 내려가는 저층 인접동이 많다면, 해당 입면 하부 구간에 세라믹 프릿(도트) 패턴이나 외부 수평 루버를 적용해 반사 면적을 줄이는 방안을 검토합니다.');
   out.push('입면을 수직 방향으로 분절하거나 3~5° 기울이면 반사 방향이 하늘 쪽으로 바뀌어 인접건물 도달 시간이 줄어듭니다(설계 변경 필요).');
   return out;
 }
 function renderNotes() {
-  $('notes').innerHTML = noteLines().map(t => `<li>${esc(t)}</li>`).join('') + mitigations().map(t => `<li class="hint">${esc(t)}</li>`).join('');
+  $('notes').innerHTML = noteLines().map(t => `<li>${esc(t)}</li>`).join('');
+  const M = mitData();
+  $('mitLead').textContent = mitHeadline(M);
+  $('mitTbl').innerHTML = mitTable(M);
+  $('mitNote').textContent = MIT_NOTE;
+  $('mitList').innerHTML = mitigations().map(t => `<li>${esc(t)}</li>`).join('');
 }
 function wireResults() {
   $('resTbl').addEventListener('click', e => {
@@ -1900,6 +1968,11 @@ const REP_CSS = `.rep{font-family:"IBM Plex Sans KR","Malgun Gothic",sans-serif;
 .rep .bsec h2 em.bad{color:#fff;background:#c8402f;border-color:#c8402f}.rep .bsec h2 em.warn{color:#a57a0d}.rep .bsec h2 em.ok{color:#2e8a57}
 .rep .mo{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;align-items:end;height:126px;margin-bottom:8px}.rep .mo div{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
 .rep .mo i{display:block;width:70%;background:#22788a;border-radius:2px 2px 0 0;min-height:1px}.rep .mo span,.rep .mo em{font-size:10px;color:#5a6776;font-style:normal;font-family:"IBM Plex Mono",monospace}
+.rep h2.mith{border-bottom:2px solid #22788a;color:#14505c}
+.rep .mitbox{border:2px solid #22788a;background:#eef7f8;border-radius:8px;padding:12px 16px;margin:8px 0 6px;break-inside:avoid}
+.rep .mitbox .lead{font-size:15px;font-weight:600;line-height:1.65;margin:0 0 8px;color:#14323a}
+.rep .mitbox table{background:#fff}.rep .mittbl tr.cur td{background:#fdf3e6}.rep .mittbl tr.best td{background:#d5ebef;font-weight:600}.rep .mittbl small{color:#5a6776;font-weight:400}
+.rep .mbar{display:inline-block;width:70px;height:8px;background:#eef1f4;border-radius:2px;margin-right:6px;vertical-align:middle;overflow:hidden}.rep .mbar i{display:block;height:100%;background:#c8402f}
 @media (max-width:640px){.rep .figs,.rep .kp{grid-template-columns:1fr 1fr}}
 @media print{.rep .bsec,.rep .pb{break-before:page}.rep h2{break-after:avoid}.rep table,.rep img{break-inside:avoid}}`;
 function bldDetail(i) {
@@ -2001,15 +2074,28 @@ function buildReport(standalone) {
 <tr class="num"><td>${S.bld.floors}층</td><td>${S.bld.fh} m</td><td>${fmt(bldH(), 1)} m</td><td>${fmt(Math.abs(polyArea(fp)), 1)} ㎡</td><td>${fmt(Math.abs(polyArea(fp)) * S.bld.floors, 0)} ㎡</td><td>${S.bld.rot}°</td></tr></table>
 <table><tr><th>입면(방위)</th><th>길이</th><th>유리 비율</th><th class="l">적용 유리</th><th>외부 반사율</th></tr>
 ${fg.map(f => { const fc = S.fac[f.i], g = glassById(fc.glass); return `<tr><td>${dirLabel(f.az)} (${fmt(f.az, 0)}°)</td><td class="num">${fmt(f.L, 1)} m</td><td class="num">${fc.wwr}%</td><td class="l">${esc(g.name)}</td><td class="num">${g.R}%</td></tr>`; }).join('')}</table>`;
+  // 맨 마지막 장: 판정 기준 요약 (중요한 내용만 6줄)
+  const critSum = (n) => `<h2 class="pb"><span>${n}</span>판정 기준 요약</h2>
+<ul>
+<li><b>판정 단위</b> — 인접 건물 벽을 창 하나(폭 ${cellW()}m × 1개 층) 단위로 나눠 창마다 판정합니다.</li>
+<li><b>반사 세기</b> — 맑은 날 직달일사 × 입사각별 유리 반사율이며, ${S.cfg.iLow} W/㎡ 이상인 반사만 판정에 넣습니다.</li>
+<li><b>기준</b> — 한 창에 이 반사가 맑은 날 하루 ${S.cfg.dailyLim}분 또는 연 ${S.cfg.annualLim}시간${wxFactor() < 1 ? `(일조율 ${Math.round(wxFactor() * 100)}% 반영 기대치)` : '(맑은 날 기준)'} 이상 닿으면 '참고 기준 초과'입니다.</li>
+<li><b>제외</b> — 해와 10° 이내로 겹치는 반사(해 자체가 이미 시야에 있는 경우)는 판정에서 뺍니다.</li>
+<li><b>출처</b> — 독일 LAI 빛공해 지침의 반사광 눈부심 판단 관행을 준용했으며, ${S.cfg.iLow} W/㎡ 하한은 본 검토의 참고값입니다. 국내 법정 기준이 아닙니다.</li>
+<li><b>유리의 영향</b> — 반사광이 닿는 경로와 시간은 유리와 상관없이 같고, 반사율이 낮은 유리는 반사 세기를 반사율에 비례해 낮춰 기준을 넘는 창을 줄입니다.</li>
+</ul>`;
   const limits = (n) => `<h2><span>${n}</span>분석 가정 및 한계</h2>
-<ul class="note"><li>모든 시간을 맑은 날로 가정한 최대 발생 조건입니다. 실제 발생 시간은 운량·미세먼지에 따라 줄어듭니다.</li>
+<ul class="note"><li>${wxFactor() < 1 ? `반사광 경로는 맑은 날 기준으로 계산하고, 연간 판정에만 일조율 ${Math.round(wxFactor() * 100)}%를 곱한 기대치를 썼습니다. 하루 판정은 맑은 날 최대입니다.` : '모든 시간을 맑은 날로 가정한 최대 발생 조건입니다. 실제 발생 시간은 운량·미세먼지에 따라 줄어듭니다.'}</li>
 <li>유리 입면을 완전한 평면 거울로 보았습니다. 실제 복층유리의 미세한 휨(오일캔 현상)은 반사광을 퍼뜨려 도달 범위를 넓히고 강도를 낮춥니다.</li>
-<li>인접 건물의 벽면 전체를 수조면으로 보았으며, 창 위치·발코니·조경수·지형은 반영하지 않았습니다. 영향 층 범위는 발생 시점 표본에서 반사광이 닿은 높이로 산정했습니다.</li>
+<li>인접 건물 벽을 폭 ${cellW()}m × 1개 층 칸으로 나눠 창 위치를 가정했으며, 실제 창 위치·발코니·조경수·지형은 반영하지 않았습니다. 영향 층 범위는 발생 시점 표본에서 반사광이 닿은 높이로 산정했습니다.</li>
 <li>유리 비율은 반사광 도달 면적에 곱해 반영했으며, 반사 강도는 맑은 날 직달일사 × 입사각별 반사율로 산정한 상대 지표입니다.</li>
 <li>참고 기준은 독일 LAI 빛공해 지침의 반사광 눈부심 판단 관행(1일 30분·연 30시간)을 준용한 것으로, 국내 법정 기준이 아닙니다.</li></ul>`;
+  const mitSec = (n, pb) => { const M = mitData(single ? scope : null); return `<h2 class="mith ${pb || ''}"><span>${n}</span>저감 방안 — 저반사 로이유리 교체 효과</h2>
+<div class="mitbox"><p class="lead">${esc(mitHeadline(M))}</p>${mitTable(M, true)}<p class="note">${esc(MIT_NOTE)}${single ? ' 표의 값은 이 동 기준입니다.' : ''}</p></div>
+<p style="margin:10px 0 2px"><b>그 밖의 저감 방안</b></p><ul>${mitigations().map(t => `<li>${esc(t)}</li>`).join('')}</ul>`; };
   let body;
   if (single) {
-    body = `<div class="rep">${head}${overview}${bldSection(scope, 3)}<h2><span>4</span>저감 방안</h2><ul>${mitigations().map(t => `<li>${esc(t)}</li>`).join('')}</ul>${limits(5)}</div>`;
+    body = `<div class="rep">${head}${overview}${bldSection(scope, 3)}${mitSec(4, 'pb')}${limits(5)}${critSum(6)}</div>`;
   } else {
     const affIdx = recs.map((r, i) => i).filter(i => recs[i].hours > 0).sort((a, b) => recs[b].hours - recs[a].hours);
     const none = recs.map((r, i) => i).filter(i => !recs[i].hours).map(i => names[i]);
@@ -2032,9 +2118,9 @@ ${S.glasses.length > 1 ? `<h2><span>7</span>유리 반사율별 비교</h2>
 ${RES.cmp.slice().sort((a, b) => a.g.R - b.g.R).map(c => `<tr${c.g.id === S.defGlass ? ' style="background:#fdf3e6"' : ''}><td class="l">${esc(c.g.name)}${c.g.id === S.defGlass ? ' (적용)' : ''}</td><td class="num">${c.g.R}%</td><td class="num">${fmt(c.maxI, 0)} W/㎡</td><td class="num">${fmt(c.mid, 1)}h</td><td class="l"><span class="bar"><i style="width:${Math.max(1, c.strong / mx * 220)}px"></i><span class="num">${fmt(c.strong, 1)}h</span></span></td></tr>`).join('')}</table>
 <p class="note">형상과 배치가 같으면 반사광이 닿는 시간은 유리 종류와 무관하게 같고, 반사 강도만 달라집니다. 시간 값은 전체 인접 건물 합계입니다.</p>` : ''}
 ${detail}
-<h2 class="${scope === 'all' ? 'pb' : ''}"><span>${n0}</span>저감 방안</h2>
-<ul>${mitigations().map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+${mitSec(n0, scope === 'all' ? 'pb' : '')}
 ${limits(n0 + 1)}
+${critSum(n0 + 2)}
 </div>`;
   }
   if (!standalone) { $('repView').innerHTML = `<style>${REP_CSS}</style>` + body; return body; }
@@ -2187,6 +2273,7 @@ function applySingle() {
       // 단일 유리 모드(현휘 분석 홈페이지): 넘겨받은 유리 하나만 씀, 유리 비교는 숨김
       S.single = !!d.single;
       S.glasses = S.single ? d.glasses.slice() : d.glasses.concat(S.glasses.filter(g => !/^kcc/.test(g.id)));
+      S.alts = Array.isArray(d.alts) ? d.alts : [];
       S.defGlass = d.defGlass; S.defWwr = d.wwr; S.fac = d.fac && d.fac.length === d.poly.length ? d.fac.map(f => ({ wwr: f.wwr, glass: f.glass })) : [];
       if (d.vwKey) S.vw.key = d.vwKey;
       if (d.vwDomain) S.vw.domain = d.vwDomain;
