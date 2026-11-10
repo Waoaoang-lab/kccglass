@@ -32,7 +32,7 @@
   var map = new vw.Map('vmap', opts);
   var viewer = null, ents = {}, urls = {}, pending = [];
   var fp = null, hideOn = true, hidden = [], hideT = 0, hideRuns = 0, pickMode = false;
-  var RADIUS = +q.get('r') || 100, siteC = null;
+  var RADIUS = q.get('r') != null ? +q.get('r') : 30, siteC = null;
 
   /* ---------- 실사 범위 제한: 현장 반경 밖은 그리지도, 불러오지도 않음 ----------
      · 카메라 먼 거리 한계(far)를 "카메라~현장 거리 + 반경"으로 매 프레임 맞춤 → 그 밖의 건물·지형 조각은 요청 자체를 안 함
