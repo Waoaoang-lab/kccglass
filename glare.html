@@ -366,6 +366,18 @@ table.res tbody tr:hover td{background:var(--sunk)}
       </div>
       <label class="chk" style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="cfgUseWx"> 연간 판정에 일조율(날씨) 반영</label>
       <p class="hint">판정은 지침처럼 <b>창 하나 단위</b>(이웃 벽을 폭 3m × 1개 층 칸으로 나눔)로 하고, 해와 10° 이내로 겹치는 반사는 뺍니다. 하루 기준은 맑은 날 최대, 연간 기준은 일조율을 켜면 날씨를 반영한 기대치로 봅니다. 기준 초과 판정에는 반사 세기가 '중' 이상(기본 100 W/㎡)인 반사만 셉니다. 세기 = 맑은 날 직달일사 × 입사각별 유리 반사율이라, 반사율이 낮은 유리일수록 같은 경로의 반사도 약하게 계산됩니다. 참고 기준 30분/일 · 30시간/년은 독일 LAI 빛공해 지침의 반사광 눈부심 판단 관행을 따른 기본값입니다. 국내 법정 기준이 아니므로 심의 조건에 맞게 조정하세요.</p>
+      <div style="border-top:1px dashed var(--line);margin-top:4px;padding-top:8px;display:grid;gap:8px">
+        <label class="chk" style="display:flex;gap:6px;align-items:center;font-size:13px;font-weight:600"><input type="checkbox" id="cfgLumOn"> 국내 판례 휘도 기준 판정 함께 보기</label>
+        <div class="g2">
+          <label class="f"><span>휘도 기준 cd/㎡</span><input type="number" min="1000" step="1000" id="cfgLumTh"></label>
+          <label class="f"><span>반사상 퍼짐 반각 ° (0=평면)</span><input type="number" min="0" max="20" step="0.5" id="cfgLumSpread"></label>
+        </div>
+        <div class="g2">
+          <label class="f"><span>휘도 판정 · 1일 (분)</span><input type="number" min="1" step="5" id="cfgLumDaily"></label>
+          <label class="f"><span>휘도 판정 · 연간 (시간)</span><input type="number" min="1" step="5" id="cfgLumAnnual"></label>
+        </div>
+        <p class="hint">대법원 2013다59142(해운대) 판결에 인용된 빛반사 시각장애 최소 기준 25,000 cd/㎡를 넘는 반사광이 창 하나에 닿는 시간을 따로 셉니다. 휘도 = 직달일사 × 93 lm/W ÷ 태양 입체각 × 입사각별 반사율이며, 세기 하한과 10° 제외 없이 모두 셉니다. 판례는 고정된 시간 한도를 두지 않았으므로 1일·연간 시간은 참고값입니다(기본 30분·30시간).</p>
+      </div>
     </div>
   </details>
 </aside>
@@ -463,9 +475,15 @@ table.res tbody tr:hover td{background:var(--sunk)}
       </div>
       <div class="row">
         <label class="f" style="grid-auto-flow:column;align-items:center;gap:6px"><span>검토서 범위</span><select id="repScope"><option value="all">전체 요약 + 동별 상세</option></select></label>
-        <button class="btn primary" id="btnRepSave">검토서 저장 (HTML)</button>
+        <label class="f" style="grid-auto-flow:column;align-items:center;gap:6px"><span>용지 방향</span><select id="repOrient"><option value="portrait">세로 (A4)</option><option value="landscape">가로 (A4)</option></select></label>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="btnRepPdf">PDF 저장</button>
+        <button class="btn primary" id="btnRepPptx">PPTX 저장</button>
+        <button class="btn" id="btnRepPrint">인쇄</button>
+        <button class="btn" id="btnRepSave">HTML 저장</button>
         <button class="btn" id="btnCsv">시각별 데이터 저장 (CSV)</button>
-        <span class="hint">저장한 HTML은 브라우저로 열어 인쇄하거나 PDF로 저장할 수 있습니다.</span>
+        <span class="hint" id="repExpMsg">PDF·PPTX는 A4 쪽 단위로 나눠 저장합니다. 가로·세로는 용지 방향에서 고릅니다.</span>
       </div>
     </div>
     <div class="reportbox" id="repView"><p class="hint">분석을 실행하면 리포트 미리보기가 표시됩니다.</p></div>
@@ -548,6 +566,11 @@ function clearDNI(alt) {
   const am = 1 / (Math.cos(zen * D2R) + 0.50572 * Math.pow(96.07995 - zen, -1.6364));
   return 1361 * Math.pow(0.7, Math.pow(am, 0.678));
 }
+/* 반사된 태양상의 휘도 (cd/㎡): 직달일사 W/㎡ × 발광효율 93 lm/W ÷ 태양 입체각 6.8e-5 sr × 반사율.
+   spread(°): 유리 휨(오일캔)으로 반사상이 퍼지는 반각. 0이면 완전 평면 거울 */
+const LUM_K = 93, SUN_SR = 6.8e-5, SUN_HALF = 0.266;
+function lumSpreadF(spread) { const a = Math.max(SUN_HALF, +spread || 0); return (SUN_HALF / a) * (SUN_HALF / a); }
+function reflLum(I, spread) { return I * LUM_K / SUN_SR * lumSpreadF(spread); }
 /* 입사각에 따른 유리 반사율 (Schlick 근사) */
 function fresnelR(cosI, R0) { const k = 1 - Math.max(0, Math.min(1, cosI)); return R0 + (1 - R0) * k * k * k * k * k; }
 
@@ -751,7 +774,7 @@ function aggregate(ev, nRec, P, R0map, override, wwrMap) {
     o.a += a; if (I > o.I) o.I = I;
     if (a > o.fa) { o.fa = a; o.f = e.f; }
   }
-  const rec = Array.from({ length: nRec }, () => ({ steps: 0, strong: 0, mid: 0, days: new Map(), midDays: new Map(), first: null, last: null, minM: 1e9, maxM: -1, fac: {}, maxI: 0, maxA: 0, month: new Array(12).fill(0), peak: null }));
+  const rec = Array.from({ length: nRec }, () => ({ steps: 0, strong: 0, mid: 0, days: new Map(), midDays: new Map(), first: null, last: null, minM: 1e9, maxM: -1, fac: {}, maxI: 0, maxA: 0, month: new Array(12).fill(0), peak: null, maxL: 0 }));
   const grid = new Map();
   const year = P.year;
   for (const o of keyMap.values()) {
@@ -766,6 +789,7 @@ function aggregate(ev, nRec, P, R0map, override, wwrMap) {
     R.minM = Math.min(R.minM, o.m); R.maxM = Math.max(R.maxM, o.m);
     R.fac[o.f] = (R.fac[o.f] || 0) + 1;
     if (o.I > R.maxI) { R.maxI = o.I; R.peak = { d: o.d, m: o.m }; }
+    if (P.lumTh) R.maxL = Math.max(R.maxL, reflLum(o.I, P.lumSpread));
     R.maxA = Math.max(R.maxA, o.a);
     const mo = new Date(Date.UTC(year, 0, o.d)).getUTCMonth();
     R.month[mo] += P.minStep * P.dayStep;
@@ -785,11 +809,21 @@ function aggregate(ev, nRec, P, R0map, override, wwrMap) {
   // 창 단위 판정: 이웃 벽을 폭 cellW × 1개 층 칸으로 나눠, 반사 영역이 칸 중심을 덮는 시각을 셈
   //  · 세기 '중'(iLow) 이상만 · 해와 10° 이내 반사 제외 · 유리 비율(wwr)만큼 그 칸에 유리 상이 맺힐 확률로 가중
   if (P.walls) {
-    const cells = new Map();
+    const cells = new Map(), cellsL = new Map();
+    // 국내 판례 휘도 기준: 반사상 휘도 ≥ lumTh(기본 25,000 cd/㎡)인 반사가 닿는 시간. 세기 하한·10° 제외 없이 모두 셈
+    const iLum = P.lumTh ? P.lumTh * SUN_SR / (LUM_K * lumSpreadF(P.lumSpread)) : Infinity;
+    const put = (map, e, W, fl, col, ncol, wgt, stepKey) => {
+      const key = e.w * 1e6 + fl * 1000 + col;
+      let c = map.get(key); if (!c) map.set(key, c = { w: e.w, rec: W.rec, fl, col, ncol, last: -1, n: 0, lastW: 0, days: new Map() });
+      if (c.last === stepKey) { if (wgt > c.lastW) { const dw = wgt - c.lastW; c.n += dw; c.days.set(e.d, c.days.get(e.d) + P.minStep * dw); c.lastW = wgt; } return; }
+      c.last = stepKey; c.lastW = wgt; c.n += wgt; c.days.set(e.d, (c.days.get(e.d) || 0) + P.minStep * wgt);
+    };
     for (const e of ev) {
-      if (!e.cp || e.x10) continue;
+      if (!e.cp) continue;
       const R0 = override != null ? override : (R0map[e.f] != null ? R0map[e.f] : 0.3);
-      if (fresnelR(e.c, R0) * e.n < P.iLow) continue;
+      const I = fresnelR(e.c, R0) * e.n;
+      const okA = !e.x10 && I >= P.iLow, okL = I >= iLum;
+      if (!okA && !okL) continue;
       const W = P.walls[e.w]; if (!W) continue;
       const info = P.nbInfo[W.rec] || {}, F = Math.max(1, info.floors || Math.round(W.h / 3.4)), flh = W.h / F;
       const ncol = Math.max(1, Math.ceil(W.L / P.cellW)), cw = W.L / ncol, cp = e.cp;
@@ -805,14 +839,12 @@ function aggregate(ev, nRec, P, R0map, override, wwrMap) {
             if ((cp[a + 1] > zc) !== (cp[b + 1] > zc) && uc < (cp[b] - cp[a]) * (zc - cp[a + 1]) / (cp[b + 1] - cp[a + 1]) + cp[a]) inside = !inside;
           }
           if (!inside) continue;
-          const key = e.w * 1e6 + fl * 1000 + col;
-          let c = cells.get(key); if (!c) cells.set(key, c = { w: e.w, rec: W.rec, fl, col, ncol, last: -1, n: 0, lastW: 0, days: new Map() });
-          if (c.last === stepKey) { if (wgt > c.lastW) { const dw = wgt - c.lastW; c.n += dw; c.days.set(e.d, c.days.get(e.d) + P.minStep * dw); c.lastW = wgt; } continue; }
-          c.last = stepKey; c.lastW = wgt; c.n += wgt; c.days.set(e.d, (c.days.get(e.d) || 0) + P.minStep * wgt);
+          if (okA) put(cells, e, W, fl, col, ncol, wgt, stepKey);
+          if (okL) put(cellsL, e, W, fl, col, ncol, wgt, stepKey);
         }
       }
     }
-    rec.forEach(R => { R.cells = { hit: 0, over: 0, worst: null }; });
+    rec.forEach(R => { R.cells = { hit: 0, over: 0, worst: null }; R.lum = { hit: 0, over: 0, worst: null, months: new Set(), maxDaily: 0, hours: 0 }; });
     for (const c of cells.values()) {
       const R = rec[c.rec]; if (!R) continue;
       let md = 0; c.days.forEach(v => { if (v > md) md = v; });
@@ -820,6 +852,15 @@ function aggregate(ev, nRec, P, R0map, override, wwrMap) {
       R.cells.hit++; if (over) R.cells.over++;
       const sc2 = (over ? 1e6 : 0) + md * 100 + hours;
       if (!R.cells.worst || sc2 > R.cells.worst.sc) R.cells.worst = { sc: sc2, w: c.w, fl: c.fl + 1, col: c.col + 1, ncol: c.ncol, maxDaily: Math.round(md), hours, over };
+    }
+    for (const c of cellsL.values()) {
+      const R = rec[c.rec]; if (!R) continue;
+      let md = 0; c.days.forEach((v, d) => { if (v > md) md = v; R.lum.months.add(new Date(Date.UTC(year, 0, d)).getUTCMonth()); });
+      const hours = c.n * P.minStep * P.dayStep / 60, over = md >= P.lumDaily || hours * P.wx >= P.lumAnnual;
+      R.lum.hit++; if (over) R.lum.over++;
+      R.lum.maxDaily = Math.max(R.lum.maxDaily, Math.round(md)); R.lum.hours = Math.max(R.lum.hours, hours);
+      const sc2 = (over ? 1e6 : 0) + md * 100 + hours;
+      if (!R.lum.worst || sc2 > R.lum.worst.sc) R.lum.worst = { sc: sc2, w: c.w, fl: c.fl + 1, col: c.col + 1, ncol: c.ncol, maxDaily: Math.round(md), hours, over };
     }
   }
   return { rec, grid, keyMap };
@@ -1044,7 +1085,7 @@ async function runAnalysis() {
 }
 function reaggregate() {
   if (!RES) return;
-  const P = Object.assign({}, RES.P, { minArea: +S.cfg.minArea, iLow: +S.cfg.iLow, iHigh: +S.cfg.iHigh, walls: RES.walls, nbInfo: RES.nbInfo, cellW: cellW(), wx: wxFactor(), dailyLim: +S.cfg.dailyLim, annualLim: +S.cfg.annualLim });
+  const P = Object.assign({}, RES.P, { minArea: +S.cfg.minArea, iLow: +S.cfg.iLow, iHigh: +S.cfg.iHigh, walls: RES.walls, nbInfo: RES.nbInfo, cellW: cellW(), wx: wxFactor(), dailyLim: +S.cfg.dailyLim, annualLim: +S.cfg.annualLim, lumTh: lc().on ? lc().th : 0, lumDaily: lc().daily, lumAnnual: lc().annual, lumSpread: lc().spread });
   RES.P2 = P;
   const R0map = {}, wwrMap = {};
   S.fac.forEach((f, i) => { R0map[i] = glassById(f.glass).R / 100; wwrMap[i] = f.wwr / 100; });
@@ -1055,6 +1096,19 @@ function reaggregate() {
   });
   // 저감 방안: 저반사 로이유리로 바꿨을 때 (같은 반사 경로, 반사율만 교체)
   RES.mit = altGlasses().map(g => ({ g, rec: aggregate(RES.ev, RES.names.length, P, null, g.R / 100, wwrMap).rec }));
+}
+/* 국내 판례 휘도 기준 설정 */
+function lc() { const c = S.cfg; return { on: c.lumOn !== false, th: +(c.lumTh ?? 25000), daily: +(c.lumDaily ?? 30), annual: +(c.lumAnnual ?? 30), spread: +(c.lumSpread ?? 0) }; }
+function fmtLum(L) { if (!L) return '-'; if (L >= 1e8) return fmt(L / 1e8, 1) + '억'; if (L >= 1e4) return fmt(L / 1e4, 0) + '만'; return fmt(L, 0); }
+function judgeLum(R) {
+  if (!R || !R.lum || !R.lum.hit) return { k: 'ok', t: '초과 유입 없음' };
+  if (R.lum.over > 0) return { k: 'bad', t: `휘도 기준 초과 (창 ${R.lum.over}곳)` };
+  return { k: 'warn', t: '초과 유입 (시간 기준 이내)' };
+}
+function lumTxt(R) {
+  const c = R && R.lum && R.lum.worst; if (!c) return '-';
+  const W = RES.walls[c.w], az = (Math.atan2(W.m[0], W.m[1]) * R2D + 360) % 360;
+  return `${dirLabel(az)}면 ${c.fl}층 ${c.col}/${c.ncol}번째 칸 · 하루 최대 ${c.maxDaily}분 · 연 ${fmt(c.hours, 1)}h${wxFactor() < 1 ? ` (날씨 반영 ${fmt(c.hours * wxFactor(), 1)}h)` : ''}`;
 }
 /* 판정: 반사광 세기가 '중'(기본 100 W/㎡) 이상인 시간만 셈.
    유리 반사율이 낮으면 같은 경로로 반사돼도 세기가 약해 판정 시간에서 빠짐 */
@@ -1138,15 +1192,15 @@ function renderResults() {
     ['최대 연간 현휘 (중 이상)', `${fmt(W ? W.midH : 0, 1)}<small>시간</small>`, W ? esc(names[w]) + ` · 약한 반사 포함 ${fmt(W.hours, 1)}시간` : '-'],
     ['최대 1일 지속', `${fmt(dmax, 0)}<small>분</small>`, dmaxI >= 0 ? esc(names[dmaxI]) + ' · ' + mdStr(y, recs[dmaxI].maxDay) : '-'],
     ['최대 반사 일사강도', `${fmt(peakI, 0)}<small>W/㎡</small>`, '맑은 날 직달일사 × 입사각별 반사율']
-  ].map(k => `<div class="kpi"><span>${k[0]}</span><b>${k[1]}</b><em>${k[2]}</em></div>`).join('');
+  ].concat(lc().on ? [['휘도 기준 초과 건물', `${recs.filter(r => judgeLum(r).k === 'bad').length}<small>개동</small>`, `${fmt(lc().th, 0)} cd/㎡ 넘는 반사가 한 창에 일 ${lc().daily}분 또는 연 ${lc().annual}시간 이상 · 최대 휘도 ${fmtLum(Math.max(0, ...recs.map(r => r.maxL)))} cd/㎡`]] : []).map(k => `<div class="kpi"><span>${k[0]}</span><b>${k[1]}</b><em>${k[2]}</em></div>`).join('');
 
   const sevDot = R => R.maxI >= P.iHigh ? 'var(--bad)' : R.maxI >= P.iLow ? 'var(--sun)' : 'var(--warn)';
-  $('resTbl').innerHTML = `<thead><tr><th>건물</th><th>층수·높이</th><th>반사 도달</th><th>기준 초과 창</th><th>가장 심한 창</th><th>발생 일수</th><th>발생 기간</th><th>시간대</th><th>원인 입면</th><th>최대 강도</th><th>'강' 등급</th><th>판정</th></tr></thead><tbody>` +
+  $('resTbl').innerHTML = `<thead><tr><th>건물</th><th>층수·높이</th><th>반사 도달</th><th>기준 초과 창</th><th>가장 심한 창</th><th>발생 일수</th><th>발생 기간</th><th>시간대</th><th>원인 입면</th><th>최대 강도</th><th>'강' 등급</th><th>판정</th>${lc().on ? '<th>최대 휘도 cd/㎡</th><th>휘도 초과 창</th><th>휘도 판정 (국내 판례)</th>' : ''}</tr></thead><tbody>` +
     recs.map((R, i) => {
       const j = judge(R), nf = RES.nbInfo[i];
       const top = Object.entries(R.fac).sort((a, b) => b[1] - a[1])[0];
       const fdir = top ? dirLabel(RES.fac[+top[0]].az) + ' 입면' : '-';
-      return `<tr data-r="${i}" class="${i === HEAT_SEL ? 'sel' : ''}"><td class="t">${esc(names[i])}</td><td>${nf.floors}층 · ${fmt(nf.h, 0)}m</td><td>${R.hours ? fmt(R.hours, 1) + ' h' : '-'}</td><td>${R.cells ? R.cells.over + ' / ' + R.cells.hit + '곳' : '-'}</td><td class="t">${cellTxt(R)}</td><td>${R.nDaysMid ? R.nDaysMid + ' 일' : (R.nDays ? '<span class="hint">' + R.nDays + ' 일(약)</span>' : '-')}</td><td class="t">${R.first != null ? mdStr(y, R.first) + ' ~ ' + mdStr(y, R.last) : '-'}</td><td>${R.maxM >= 0 ? hhmm(R.minM) + '–' + hhmm(R.maxM + RES.P.minStep) : '-'}</td><td class="t">${fdir}</td><td>${R.maxI ? '<span class="sev" style="background:' + sevDot(R) + '"></span>' + fmt(R.maxI, 0) : '-'}</td><td>${R.strongH ? fmt(R.strongH, 1) + ' h' : '-'}</td><td class="t"><span class="pill ${j.k}">${j.t}</span></td></tr>`;
+      return `<tr data-r="${i}" class="${i === HEAT_SEL ? 'sel' : ''}"><td class="t">${esc(names[i])}</td><td>${nf.floors}층 · ${fmt(nf.h, 0)}m</td><td>${R.hours ? fmt(R.hours, 1) + ' h' : '-'}</td><td>${R.cells ? R.cells.over + ' / ' + R.cells.hit + '곳' : '-'}</td><td class="t">${cellTxt(R)}</td><td>${R.nDaysMid ? R.nDaysMid + ' 일' : (R.nDays ? '<span class="hint">' + R.nDays + ' 일(약)</span>' : '-')}</td><td class="t">${R.first != null ? mdStr(y, R.first) + ' ~ ' + mdStr(y, R.last) : '-'}</td><td>${R.maxM >= 0 ? hhmm(R.minM) + '–' + hhmm(R.maxM + RES.P.minStep) : '-'}</td><td class="t">${fdir}</td><td>${R.maxI ? '<span class="sev" style="background:' + sevDot(R) + '"></span>' + fmt(R.maxI, 0) : '-'}</td><td>${R.strongH ? fmt(R.strongH, 1) + ' h' : '-'}</td><td class="t"><span class="pill ${j.k}">${j.t}</span></td>${lc().on ? (() => { const jl = judgeLum(R); return `<td>${R.maxL ? fmtLum(R.maxL) + ' <span class="hint">(×' + fmtLum(R.maxL / lc().th) + ')</span>' : '-'}</td><td class="t">${R.lum && R.lum.hit ? R.lum.over + ' / ' + R.lum.hit + '곳 · ' + lumTxt(R) : '-'}</td><td class="t"><span class="pill ${jl.k}">${jl.t}</span></td>`; })() : ''}</tr>`;
     }).join('') + '</tbody>';
 
   $('heatSel').innerHTML = `<option value="-1">전체 인접 건물</option>` + names.map((n, i) => `<option value="${i}"${i === HEAT_SEL ? ' selected' : ''}>${esc(n)}</option>`).join('');
@@ -1184,6 +1238,11 @@ function noteLines() {
     out.push(`영향이 가장 큰 건물은 ${names[w]}로, 세기 ${P.iLow} W/㎡ 이상 반사가 연간 약 ${fmt(R.midH, 1)}시간(${R.nDaysMid}일), 하루 최대 ${R.maxDailyMid}분 발생합니다 (약한 반사 포함 시 ${fmt(R.hours, 1)}시간). 주로 ${mdStr(y, R.first)}~${mdStr(y, R.last)} 사이 ${hhmm(R.minM)}–${hhmm(R.maxM + RES.P.minStep)}에 ${top ? dirLabel(RES.fac[+top[0]].az) + ' 입면' : ''}의 반사가 원인입니다.`);
     const over = aff.filter(a => judge(a[0]).k === 'bad').map(a => names[a[1]]);
     out.push(over.length ? `창 단위 참고 기준(한 창에 세기 ${P.iLow} W/㎡ 이상 반사가 1일 ${S.cfg.dailyLim}분 또는 연 ${S.cfg.annualLim}시간)을 넘는 건물: ${over.join(', ')}.` : `모든 영향 건물이 참고 기준(1일 ${S.cfg.dailyLim}분, 연 ${S.cfg.annualLim}시간) 이내입니다.`);
+  }
+  if (aff.length && lc().on) {
+    const L = lc(), lb = aff.filter(a => judgeLum(a[0]).k === 'bad').map(a => names[a[1]]), lh = aff.filter(a => a[0].lum && a[0].lum.hit).length;
+    const mL = Math.max(0, ...recs.map(r => r.maxL));
+    out.push(`[국내 판례 휘도 기준] 반사상 최대 휘도는 약 ${fmtLum(mL)} cd/㎡로 기준 ${fmt(L.th, 0)} cd/㎡의 약 ${fmtLum(mL / L.th)}배입니다. ${lh}개동의 창에 기준을 넘는 반사가 닿으며, ` + (lb.length ? `1일 ${L.daily}분 또는 연 ${L.annual}시간 이상 닿는 건물은 ${lb.join(', ')}입니다.` : `1일 ${L.daily}분·연 ${L.annual}시간 이상 닿는 건물은 없습니다.`));
   }
   if (aff.length && S.glasses.length <= 1) { const M = mitData(); if (M && M.best) out.push('[저감 효과] ' + mitHeadline(M)); }
   const sorted = RES.cmp.slice().sort((a, b) => a.g.R - b.g.R), cc = RES.cmp.find(c => c.g.id === cur.id), lo = sorted[0];
@@ -1931,7 +1990,7 @@ function wireVw() {
 let DL = null;
 async function saveFile(filename, data) {
   if (DL === null) { try { DL = await window.claude?.use?.('downloads'); } catch (e) { DL = null; } DL = DL || false; }
-  if (!DL) { toast('이 화면에서는 파일 저장을 쓸 수 없습니다.'); return false; }
+  if (!DL) return dlAnchor(filename, new Blob([data], { type: /\.csv$/i.test(filename) ? 'text/csv' : /\.json$/i.test(filename) ? 'application/json' : 'text/html' }));
   try { await DL.save({ filename, data }); return true; }
   catch (e) { if (e && e.code === 'declined') return false; toast('저장하지 못했습니다' + (e && e.message ? ': ' + e.message : '')); return false; }
 }
@@ -1944,6 +2003,9 @@ function wireSave() {
   };
   $('btnRepSave').onclick = () => { if (!RES) { toast('먼저 분석을 실행하세요.'); return; } const sc = repScope(); saveFile(($('projName').value || '현휘분석') + (typeof sc === 'number' ? '_' + RES.names[sc] : sc === 'all' ? '_동별상세' : '') + '_현휘검토서.html', buildReport(true)); };
   $('repScope').onchange = () => { if (RES) buildReport(); };
+  $('btnRepPdf').onclick = () => repExport('pdf');
+  $('btnRepPptx').onclick = () => repExport('pptx');
+  $('btnRepPrint').onclick = printReport;
   $('btnCsv').onclick = () => {
     if (!RES) { toast('먼저 분석을 실행하세요.'); return; }
     const y = RES.P.year, rows = [['건물', '날짜', '시각(KST)', '반사 도달면적(㎡)', '최대 반사 일사강도(W/㎡)', '등급', '원인 입면', '태양고도(°)', '태양방위(°)']];
@@ -1951,6 +2013,175 @@ function wireSave() {
     list.forEach(o => { const dt = dateOf(y, o.d); rows.push([RES.names[o.r], `${y}-${String(dt.m).padStart(2, '0')}-${String(dt.d).padStart(2, '0')}`, hhmm(o.m), o.a.toFixed(1), o.I.toFixed(0), o.I >= P.iHigh ? '강' : o.I >= P.iLow ? '중' : '약', dirLabel(RES.fac[o.f].az), o.alt.toFixed(1), o.az.toFixed(1)]); });
     saveFile(($('projName').value || '현휘분석') + '_시각별.csv', '﻿' + rows.map(r => r.map(v => /[",\n]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : v).join(',')).join('\r\n'));
   };
+}
+
+/* ===== 검토서 내보내기: PDF · PPTX · 인쇄 (A4 가로/세로) ===== */
+const LIB = {
+  h2c: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  pptx: 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
+};
+const PAGE = { portrait: { w: 210, h: 297 }, landscape: { w: 297, h: 210 } }, PG_M = 12, PG_FOOT = 6;
+function repOrient() { return $('repOrient') && $('repOrient').value === 'landscape' ? 'landscape' : 'portrait'; }
+function loadLib(src, win, test) {
+  win = win || window;
+  return new Promise((ok, no) => {
+    if (test && test()) return ok();
+    const s = win.document.createElement('script'); s.src = src;
+    s.onload = () => ok(); s.onerror = () => no(new Error(src));
+    win.document.head.appendChild(s);
+  });
+}
+function dlAnchor(filename, blob) {
+  try {
+    const u = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 60000); return true;
+  } catch (e) { toast('이 화면에서는 파일 저장을 쓸 수 없습니다.'); return false; }
+}
+async function saveBlob(filename, blob) {
+  if (DL === null) { try { DL = await window.claude?.use?.('downloads'); } catch (e) { DL = null; } DL = DL || false; }
+  if (DL) {
+    try { await DL.save({ filename, data: blob }); return true; }
+    catch (e) { if (e && e.code === 'declined') return false; }
+  }
+  return dlAnchor(filename, blob);
+}
+function repFileBase() {
+  const sc = repScope();
+  return ($('projName').value || '현휘분석') + (typeof sc === 'number' ? '_' + RES.names[sc] : sc === 'all' ? '_동별상세' : '') + '_현휘검토서_' + (repOrient() === 'landscape' ? '가로' : '세로');
+}
+// 보이지 않는 iframe에 검토서를 폭 cssW(px)로 펼침
+function repFrame(cssW) {
+  return new Promise((ok, no) => {
+    const html = buildReport(true).replace('</head>', `<style>html,body{margin:0!important;padding:0!important;background:#fff}body{width:${cssW}px}.rep{max-width:none!important;margin:0!important}</style></head>`);
+    const f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
+    f.style.cssText = `position:fixed;left:-${cssW + 400}px;top:0;width:${cssW}px;height:1200px;border:0;pointer-events:none`;
+    f.onload = async () => {
+      try {
+        const d = f.contentDocument;
+        try { await Promise.race([d.fonts.ready, new Promise(r => setTimeout(r, 4000))]); } catch (e) { }
+        await Promise.all([...d.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+        f.style.height = (d.documentElement.scrollHeight + 20) + 'px';
+        await new Promise(r => setTimeout(r, 60));
+        ok(f);
+      } catch (e) { no(e); }
+    };
+    f.srcdoc = html; document.body.appendChild(f);
+  });
+}
+// 쪽을 나눌 수 있는 블록(제목·표·문단·그림) 위치 측정
+function repBlocks(doc) {
+  const rep = doc.querySelector('.rep'), base = rep.getBoundingClientRect().top, out = [];
+  const add = (el, forced) => {
+    const r = el.getBoundingClientRect(); if (r.height <= 0) return;
+    const b = { top: r.top - base, bottom: r.bottom - base, head: /^H[1-4]$/.test(el.tagName), forced: !!forced, cuts: [] };
+    if (/^(TABLE|UL|OL)$/.test(el.tagName)) el.querySelectorAll('tr, li').forEach(x => { const q = x.getBoundingClientRect(); b.cuts.push(q.bottom - base); });
+    out.push(b);
+  };
+  for (const el of rep.children) {
+    if (el.tagName === 'STYLE') continue;
+    if (el.tagName === 'SECTION') { [...el.children].forEach((c, k) => add(c, k === 0 && el.classList.contains('bsec'))); continue; }
+    add(el, el.tagName === 'H2' && el.classList.contains('pb'));
+  }
+  return out.sort((a, b) => a.top - b.top);
+}
+// 쪽 나누기: 제목은 다음 내용과 붙이고, 긴 표는 행 경계에서 자름
+function paginate(bl, pageH) {
+  const pages = []; if (!bl.length) return pages;
+  let s = 0;
+  for (let i = 0; i < bl.length; i++) {
+    const b = bl[i], p = bl[i - 1];
+    if (b.forced && b.top - s > pageH * 0.2) { pages.push([s, b.top]); s = b.top; } // 앞쪽이 제목 정도뿐이면 그대로 이어 씀
+    let guard = 0;
+    while (b.bottom - s > pageH && guard++ < 500) {
+      const prevHead = p && p.head && p.top > s + 1;
+      let cut;
+      if (b.top > s + 1 && b.bottom - b.top <= pageH) cut = prevHead ? p.top : b.top;
+      else {
+        const lim = s + pageH, ok = b.cuts.filter(c => c > s + 30 && c <= lim);
+        cut = ok.length ? ok[ok.length - 1] : lim;
+      }
+      if (cut <= s + 1) cut = s + pageH;
+      pages.push([s, cut]); s = cut;
+    }
+  }
+  pages.push([s, bl[bl.length - 1].bottom + 6]);
+  return pages.filter(q => q[1] - q[0] > 4);
+}
+async function renderPages(orient, prog) {
+  const pg = PAGE[orient], cw = pg.w - 2 * PG_M, ch = pg.h - 2 * PG_M - PG_FOOT;
+  const cssW = orient === 'landscape' ? 1040 : 760, pageH = cssW * ch / cw;
+  const f = await repFrame(cssW);
+  try {
+    const doc = f.contentDocument, win = f.contentWindow;
+    await loadLib(LIB.h2c, win, () => win.html2canvas);
+    const top0 = doc.querySelector('.rep').getBoundingClientRect().top;
+    const pages = paginate(repBlocks(doc), pageH), out = [];
+    for (let i = 0; i < pages.length; i++) {
+      prog(i + 1, pages.length);
+      const [a, b] = pages[i], h = Math.ceil(b - a);
+      const cv = await win.html2canvas(doc.body, { x: 0, y: Math.floor(top0 + a), width: cssW, height: h, scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true, windowWidth: cssW, windowHeight: doc.documentElement.scrollHeight, scrollX: 0, scrollY: 0 });
+      out.push({ url: cv.toDataURL('image/jpeg', 0.92), hPx: h });
+    }
+    return { pages: out, pg, cw, ch, k: cw / cssW };
+  } finally { f.remove(); }
+}
+let EXPORTING = false;
+async function repExport(kind) {
+  if (!RES) { toast('먼저 분석을 실행하세요.'); return; }
+  if (EXPORTING) return; EXPORTING = true;
+  const btns = ['btnRepPdf', 'btnRepPptx', 'btnRepPrint'].map($); btns.forEach(b => b.disabled = true);
+  const msg = $('repExpMsg'), old = msg.textContent, label = kind === 'pdf' ? 'PDF' : 'PPTX';
+  const orient = repOrient(), base = repFileBase(), title = ($('projName').value || '') + ' 현휘 검토서';
+  try {
+    msg.textContent = label + ' 준비 중…';
+    await loadLib(kind === 'pdf' ? LIB.jspdf : LIB.pptx, window, () => kind === 'pdf' ? window.jspdf : window.PptxGenJS);
+    const R = await renderPages(orient, (i, n) => { msg.textContent = `${label} 만드는 중… ${i} / ${n}쪽`; });
+    const n = R.pages.length;
+    if (kind === 'pdf') {
+      const doc = new window.jspdf.jsPDF({ orientation: orient, unit: 'mm', format: 'a4', compress: true });
+      R.pages.forEach((p, i) => {
+        if (i) doc.addPage('a4', orient);
+        doc.addImage(p.url, 'JPEG', PG_M, PG_M, R.cw, p.hPx * R.k, undefined, 'FAST');
+        doc.setFontSize(8); doc.setTextColor(122, 134, 147);
+        doc.text(`${i + 1} / ${n}`, R.pg.w - PG_M, R.pg.h - PG_M - 1, { align: 'right' });
+      });
+      doc.setProperties({ title });
+      await saveBlob(base + '.pdf', doc.output('blob'));
+    } else {
+      const IN = 25.4, pptx = new window.PptxGenJS(), lay = 'A4_' + orient;
+      pptx.defineLayout({ name: lay, width: R.pg.w / IN, height: R.pg.h / IN }); pptx.layout = lay;
+      pptx.title = title;
+      R.pages.forEach((p, i) => {
+        const s = pptx.addSlide(); s.background = { color: 'FFFFFF' };
+        s.addImage({ data: p.url.replace(/^data:/, ''), x: PG_M / IN, y: PG_M / IN, w: R.cw / IN, h: p.hPx * R.k / IN });
+        s.addText(`${title}   ${i + 1} / ${n}`, { x: PG_M / IN, y: (R.pg.h - PG_M - PG_FOOT + 1) / IN, w: R.cw / IN, h: (PG_FOOT - 1) / IN, fontSize: 8, color: '7A8693', align: 'right', fontFace: 'Malgun Gothic', margin: 0 });
+      });
+      await saveBlob(base + '.pptx', await pptx.write({ outputType: 'blob' }));
+    }
+    msg.textContent = `${label} ${n}쪽을 저장했습니다 (A4 ${orient === 'landscape' ? '가로' : '세로'}).`;
+    setTimeout(() => { if (msg.textContent.startsWith(label)) msg.textContent = old; }, 6000);
+  } catch (e) {
+    console.error(e); msg.textContent = old;
+    toast(label + ' 파일을 만들지 못했습니다. 인터넷 연결을 확인하거나 인쇄 → PDF로 저장을 써 주세요.');
+  } finally { EXPORTING = false; btns.forEach(b => b.disabled = false); }
+}
+function printReport() {
+  if (!RES) { toast('먼저 분석을 실행하세요.'); return; }
+  const f = document.createElement('iframe');
+  f.setAttribute('aria-hidden', 'true');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  f.onload = async () => {
+    try { await Promise.race([f.contentDocument.fonts.ready, new Promise(r => setTimeout(r, 3000))]); } catch (e) { }
+    setTimeout(() => {
+      try { f.contentWindow.focus(); f.contentWindow.print(); }
+      catch (e) { toast('인쇄 창을 열지 못했습니다. HTML 저장 후 브라우저에서 인쇄해 주세요.'); }
+      setTimeout(() => f.remove(), 60000);
+    }, 200);
+  };
+  f.srcdoc = buildReport(true); document.body.appendChild(f);
 }
 
 /* ===== 리포트 ===== */
@@ -1974,6 +2205,7 @@ const REP_CSS = `.rep{font-family:"IBM Plex Sans KR","Malgun Gothic",sans-serif;
 .rep .mitbox table{background:#fff}.rep .mittbl tr.cur td{background:#fdf3e6}.rep .mittbl tr.best td{background:#d5ebef;font-weight:600}.rep .mittbl small{color:#5a6776;font-weight:400}
 .rep .mbar{display:inline-block;width:70px;height:8px;background:#eef1f4;border-radius:2px;margin-right:6px;vertical-align:middle;overflow:hidden}.rep .mbar i{display:block;height:100%;background:#c8402f}
 @media (max-width:640px){.rep .figs,.rep .kp{grid-template-columns:1fr 1fr}}
+.rep h3.sub{font-size:14px;margin:16px 0 6px;color:#22788a}.rep td.bad,.rep b.bad{color:#c8402f}.rep td.warn,.rep b.warn{color:#a57a0d}.rep td.ok,.rep b.ok{color:#2e8a57}
 @media print{.rep .bsec,.rep .pb{break-before:page}.rep h2{break-after:avoid}.rep table,.rep img{break-inside:avoid}}`;
 function bldDetail(i) {
   const P = RES.P2, R = RES.ag.rec[i], step = RES.P.minStep, ds = RES.P.dayStep, days = new Map();
@@ -2009,6 +2241,7 @@ function bldOpinion(i, D) {
   out.push(`${name}은 검토 건물 ${D.dir || ''}쪽 약 ${fmt(D.dist, 0)}m에 있으며, ${f0 ? dirLabel(RES.fac[f0.f].az) + ' 입면' : '유리 입면'}의 반사광을 주로 받습니다${wl.length ? ` (${wl.slice(0, 2).join('·')} 벽면${D.floorRange ? `, ${D.floorRange[0]}~${D.floorRange[1]}층 높이` : ''})` : ''}.`);
   out.push(`반사광은 연간 ${fmt(R.hours, 1)}시간, ${R.nDays}일 닿으며 ${mdStr(y, R.first)}~${mdStr(y, R.last)} 사이 ${hhmm(R.minM)}–${hhmm(R.maxM + RES.P.minStep)}에 나타납니다. 이 중 세기 ${S.cfg.iLow} W/㎡ 이상은 연간 ${fmt(R.midH, 1)}시간(${R.nDaysMid}일)${R.maxDailyMid ? `, 가장 긴 날은 ${mdStr(y, R.maxDayMid)}로 ${R.maxDailyMid}분` : ''}입니다.`);
   out.push(j.k === 'bad' ? `참고 기준(세기 ${S.cfg.iLow} W/㎡ 이상 반사 1일 ${S.cfg.dailyLim}분 또는 연 ${S.cfg.annualLim}시간)을 넘어 저감 대책 검토가 필요합니다.` : `참고 기준(세기 ${S.cfg.iLow} W/㎡ 이상 반사 1일 ${S.cfg.dailyLim}분, 연 ${S.cfg.annualLim}시간) 이내입니다.`);
+  if (lc().on && R.lum) { const jl = judgeLum(R), L = lc(); out.push(R.lum.hit ? `국내 판례 휘도 기준(${fmt(L.th, 0)} cd/㎡)으로 보면 최대 휘도 약 ${fmtLum(R.maxL)} cd/㎡(기준의 약 ${fmtLum(R.maxL / L.th)}배)인 반사가 창 ${R.lum.hit}곳에 닿고, 가장 심한 창은 ${lumTxt(R)}입니다. ${jl.k === 'bad' ? `1일 ${L.daily}분 또는 연 ${L.annual}시간 이상이므로 휘도 기준으로도 저감 대책 검토가 필요합니다.` : `1일 ${L.daily}분·연 ${L.annual}시간 미만입니다.`}` : `국내 판례 휘도 기준(${fmt(L.th, 0)} cd/㎡)을 넘는 반사가 창에 닿지 않습니다.`); }
   const cur = D.cmp.find(c => c.g.id === S.defGlass), lo = D.cmp[0];
   if (cur && lo && lo.g.id !== cur.g.id) out.push(`${lo.g.name}(${lo.g.R}%) 적용 시 이 동의 '강' 등급 시간은 ${fmt(cur.r.strongH, 1)}h → ${fmt(lo.r.strongH, 1)}h, 최대 강도는 ${fmt(cur.r.maxI, 0)} → ${fmt(lo.r.maxI, 0)} W/㎡로 낮아집니다.`);
   if (f0 && D.facH.length > 1 && f0.h / D.facH.reduce((s, x) => s + x.h, 0) > 0.6) out.push(`영향의 대부분이 ${dirLabel(RES.fac[f0.f].az)} 입면에서 오므로, 이 입면만 저반사 유리로 바꿔도 효과가 큽니다.`);
@@ -2032,7 +2265,8 @@ function bldSection(i, num) {
 <table><tr><th class="l" style="width:20%">건물 규모</th><td class="l">${D.info.floors}층 · 높이 ${fmt(D.info.h, 1)}m</td><th class="l" style="width:20%">검토 건물과 관계</th><td class="l">${D.dir ? D.dir + '쪽 약 ' + fmt(D.dist, 0) + 'm' : '-'}</td></tr>
 <tr><th class="l">발생 기간</th><td class="l">${mdStr(y, R.first)} ~ ${mdStr(y, R.last)}</td><th class="l">발생 시간대</th><td class="l num">${hhmm(R.minM)} – ${hhmm(R.maxM + RES.P.minStep)}</td></tr>
 <tr><th class="l">반사광 닿는 벽면</th><td class="l">${Object.keys(D.walls).length ? Object.entries(D.walls).sort((a, b) => b[1] - a[1]).map(e => e[0] + '측').join(', ') : '-'}</td><th class="l">영향 층 범위</th><td class="l">${D.floorRange ? D.floorRange[0] + '층 ~ ' + D.floorRange[1] + '층' : '-'}</td></tr>
-<tr><th class="l">강도별 시간</th><td class="l" colspan="3">강(≥${P.iHigh}) ${fmt(R.strongH, 1)}h · 중 이상(≥${P.iLow}) ${fmt(R.midH, 1)}h · 전체 ${fmt(R.hours, 1)}h</td></tr></table>
+<tr><th class="l">강도별 시간</th><td class="l" colspan="3">강(≥${P.iHigh}) ${fmt(R.strongH, 1)}h · 중 이상(≥${P.iLow}) ${fmt(R.midH, 1)}h · 전체 ${fmt(R.hours, 1)}h</td></tr>
+${lc().on ? (() => { const jl = judgeLum(R); return `<tr><th class="l">국내 판례 휘도 기준</th><td class="l" colspan="3"><b class="${jl.k}">${jl.t}</b> · 최대 휘도 ${fmtLum(R.maxL)} cd/㎡ (기준 ${fmt(lc().th, 0)}의 약 ${fmtLum(R.maxL / lc().th)}배) · 초과 반사 닿는 창 ${R.lum ? R.lum.hit : 0}곳 · 가장 심한 창 ${lumTxt(R)}</td></tr>`; })() : ''}</table>
 <div class="figs">${plan ? `<div><img src="${plan}" alt="${esc(name)} 최대 영향 시점 배치도"><p class="cap">최대 강도 시점의 반사광 경로(주황 점선)와 도달 벽면</p></div>` : ''}
 <div><p class="cap" style="margin:0 0 4px">월별 현휘 시간 (시간)</p>${months}
 <table><tr><th class="l">원인 입면</th><th>연간 시간</th><th>비중</th></tr>${D.facH.map(x => `<tr><td class="l">${dirLabel(RES.fac[x.f].az)} 입면 (${fmt(RES.fac[x.f].az, 0)}°)</td><td class="num">${fmt(x.h, 1)}h</td><td class="num">${fmt(x.h / fsum * 100, 0)}%</td></tr>`).join('')}</table></div></div>
@@ -2068,7 +2302,8 @@ function buildReport(standalone) {
 <table><tr><th class="l" style="width:22%">대지 위치</th><td class="l">${esc(S.site.addr)} (N ${fmt(S.site.lat, 4)}°, E ${fmt(S.site.lon, 4)}°)</td></tr>
 <tr><th class="l">분석 기간·간격</th><td class="l">${period}, ${S.cfg.dayStep == 1 ? '매일' : S.cfg.dayStep + '일 간격'} · ${S.cfg.minStep}분 간격, 한국표준시(KST)</td></tr>
 <tr><th class="l">태양 위치</th><td class="l">NOAA 천문 알고리즘(대기 굴절 보정), 맑은 날 직달일사 모델(Meinel)</td></tr>
-<tr><th class="l">판단 기준(참고)</th><td class="l">인접 건물 벽을 창 단위(폭 ${cellW()}m × 1개 층)로 나눠, 한 창에 반사 일사 세기 ${S.cfg.iLow} W/㎡ 이상인 반사광이 1일 ${S.cfg.dailyLim}분(맑은 날 기준) 또는 연간 ${S.cfg.annualLim}시간${wxFactor() < 1 ? `(서울 평년 일조율 ${Math.round(wxFactor() * 100)}% 반영)` : '(맑은 날 기준)'} 이상 도달하면 '기준 초과'. 해와 10° 이내로 겹치는 반사는 제외, 세기 = 맑은 날 직달일사 × 입사각별 유리 반사율, 최소 영향 면적 ${S.cfg.minArea}㎡</td></tr></table>
+<tr><th class="l">판단 기준(참고)</th><td class="l">인접 건물 벽을 창 단위(폭 ${cellW()}m × 1개 층)로 나눠, 한 창에 반사 일사 세기 ${S.cfg.iLow} W/㎡ 이상인 반사광이 1일 ${S.cfg.dailyLim}분(맑은 날 기준) 또는 연간 ${S.cfg.annualLim}시간${wxFactor() < 1 ? `(서울 평년 일조율 ${Math.round(wxFactor() * 100)}% 반영)` : '(맑은 날 기준)'} 이상 도달하면 '기준 초과'. 해와 10° 이내로 겹치는 반사는 제외, 세기 = 맑은 날 직달일사 × 입사각별 유리 반사율, 최소 영향 면적 ${S.cfg.minArea}㎡</td></tr>
+${lc().on ? `<tr><th class="l">판단 기준(국내 판례)</th><td class="l">반사상 휘도 ${fmt(lc().th, 0)} cd/㎡ 이상(대법원 2013다59142 판결에 인용된 빛반사 시각장애 최소 기준)인 반사광이 한 창에 1일 ${lc().daily}분 또는 연간 ${lc().annual}시간 이상 닿으면 '휘도 기준 초과'로 봄. 시간 한도는 판례에 정해진 값이 아닌 참고값</td></tr>` : ''}</table>
 <h2><span>2</span>건축물 및 유리 조건</h2>
 <table><tr><th>지상 층수</th><th>층고</th><th>높이</th><th>기준층 면적</th><th>연면적(계산)</th><th>진북 회전</th></tr>
 <tr class="num"><td>${S.bld.floors}층</td><td>${S.bld.fh} m</td><td>${fmt(bldH(), 1)} m</td><td>${fmt(Math.abs(polyArea(fp)), 1)} ㎡</td><td>${fmt(Math.abs(polyArea(fp)) * S.bld.floors, 0)} ㎡</td><td>${S.bld.rot}°</td></tr></table>
@@ -2084,6 +2319,35 @@ ${fg.map(f => { const fc = S.fac[f.i], g = glassById(fc.glass); return `<tr><td>
 <li><b>출처</b> — 독일 LAI 빛공해 지침의 반사광 눈부심 판단 관행을 준용했으며, ${S.cfg.iLow} W/㎡ 하한은 본 검토의 참고값입니다. 국내 법정 기준이 아닙니다.</li>
 <li><b>유리의 영향</b> — 반사광이 닿는 경로와 시간은 유리와 상관없이 같고, 반사율이 낮은 유리는 반사 세기를 반사율에 비례해 낮춰 기준을 넘는 창을 줄입니다.</li>
 </ul>`;
+  // 판정 기준 해설: 독일 LAI 지침 + 국내 판례 휘도 기준
+  const critExplain = (n) => { const L = lc(), wx = wxFactor(); return `<h2 class="pb"><span>${n}</span>판정 기준 해설</h2>
+<p class="note">국내에는 건축물 외벽의 태양반사광을 직접 규제하는 법정 기준이 없습니다. 「인공조명에 의한 빛공해 방지법」은 인공조명만 대상으로 합니다. 그래서 실무에서는 해외 지침과 국내 판례를 참고 기준으로 씁니다. 본 검토는 아래 두 기준을 함께 적용했습니다.</p>
+<h3 class="sub">가. 독일 LAI 빛공해 지침 — 반사광 눈부심 판단</h3>
+<table><tr><th class="l" style="width:22%">정식 명칭</th><td class="l">Hinweise zur Messung, Beurteilung und Minderung von Lichtimmissionen (빛 공해의 측정·평가·저감에 관한 지침)</td></tr>
+<tr><th class="l">발행</th><td class="l">독일 연방·주 환경보호 실무협의회(LAI) · 2012년 9월 13일 의결, 부록 2(반사 눈부심)는 2015년 11월 3일 개정</td></tr>
+<tr><th class="l">원래 대상</th><td class="l">태양광 패널의 반사 눈부심. 유리 외벽도 같은 거울 반사 원리이므로 독일 눈부심 평가 실무에서 준용합니다.</td></tr>
+<tr><th class="l">판단 기준</th><td class="l">이웃 주택의 창·발코니 등 영향 지점에서, 매일 맑다고 가정한 최대 반사가 <b>하루 30분</b> 또는 <b>1년 30시간</b> 이상이면 심한 불편(erhebliche Belästigung)이 생길 수 있는 것으로 봅니다.</td></tr>
+<tr><th class="l">제외 조건</th><td class="l">반사광이 오는 방향과 해의 방향이 10° 이내면 뺍니다. 이때는 해 자체가 이미 시야에 들어와 반사광만의 영향으로 보기 어렵기 때문입니다.</td></tr>
+<tr><th class="l">거리</th><td class="l">지침은 경험상 반사면에서 약 100m보다 먼 지점은 눈부심이 짧게 끝나는 것으로 봅니다. 본 검토는 최대 영향 거리 ${S.cfg.maxDist}m까지 계산했습니다.</td></tr>
+<tr><th class="l">본 검토 적용</th><td class="l">인접 건물 벽을 창 하나(폭 ${cellW()}m × 1개 층) 칸으로 나눠 칸마다 시간을 셌습니다. 지침에 없는 반사 세기 하한 ${S.cfg.iLow} W/㎡를 두어 약한 반사는 판정에서 뺐습니다(본 검토의 참고값). 기준 시간은 1일 ${S.cfg.dailyLim}분 · 연 ${S.cfg.annualLim}시간${wx < 1 ? `이며, 연간 시간에는 평년 일조율 ${Math.round(wx * 100)}%를 곱했습니다` : '입니다'}.</td></tr></table>
+<h3 class="sub">나. 국내 판례 — 빛반사 시각장애 휘도 25,000 cd/㎡</h3>
+<table><tr><th class="l" style="width:22%">대법원 2021. 3. 11.<br>2013다59142</th><td class="l">부산 해운대 사건. 원심이 인정한 사실에 따르면 반사광 휘도가 <b>25,000 cd/㎡</b>를 넘으면 눈이 포화되어 시각 정보를 순간적으로 지각하지 못하는 빛반사 시각장애(disability glare, 불능현휘)가 생깁니다. 이 사건에서 측정된 최대 휘도는 약 6,983만 cd/㎡로 기준의 약 2,800배였고, 대법원은 아파트 시가 하락 손해와 위자료를 인정한 원심 판단을 유지했습니다.</td></tr>
+<tr><th class="l">대법원 2021. 6. 3.<br>2016다33202 등</th><td class="l">성남 분당 사옥 사건. 휘도가 기준의 약 440~29,200배이고 연중 7~9개월, 하루 1~3시간 반사광이 들어온 사실이 다뤄졌습니다. 대법원은 태양반사광의 참을 한도를 일조방해 기준과 다른 독자적 기준으로 판단해야 하며, 주요 생활공간에서 실제로 받는 빛의 강도와 지속시간을 심리해야 한다며 원심을 파기환송했습니다.</td></tr>
+<tr><th class="l">참을 한도 판단 요소</th><td class="l">반사광의 강도·각도, 유입 시기·시간, 창과 거실의 위치, 두 건물의 이격거리, 공법상 규제 위반 여부, 지역의 용도, 방지조치 가능성, 토지 이용의 선후관계, 교섭 경과 등을 모두 종합합니다.</td></tr>
+<tr><th class="l">유의점</th><td class="l">25,000 cd/㎡는 시각장애가 생기는 밝기의 기준이며, 이 수치만으로 배상 책임이 정해지지는 않습니다. 판례는 하루·연간 몇 시간 이상이면 위법이라는 고정된 시간 한도를 두지 않았습니다.</td></tr>
+<tr><th class="l">본 검토 적용</th><td class="l">반사상 휘도 = 맑은 날 직달일사 × 발광효율 93 lm/W ÷ 태양 입체각 6.8×10⁻⁵ sr × 입사각별 유리 반사율${L.spread > 0 ? ` × 유리 휨 퍼짐 보정(반각 ${L.spread}°)` : ''}로 계산했습니다. 휘도 ${fmt(L.th, 0)} cd/㎡ 이상인 반사가 창 하나에 닿는 시간을 세기 하한·10° 제외 없이 모두 셌고, 1일 ${L.daily}분 또는 연 ${L.annual}시간 이상이면 '휘도 기준 초과'로 표시했습니다. 시간 한도는 판례 값이 아닌 참고값입니다.</td></tr></table>
+<p class="note"><b>휘도 기준의 성격</b> — 해의 휘도는 십억 cd/㎡ 안팎이어서, 평평한 유리에 비친 해의 상은 반사율 7%의 저반사 유리여도 수천만 cd/㎡로 기준을 수천 배 넘습니다. 그래서 휘도 기준 초과 여부는 사실상 반사광이 창에 닿느냐로 정해집니다. 저반사 유리로 바꾸면 LAI 기준의 반사 세기와 초과 창은 크게 줄지만, 휘도 기준 시간은 거의 줄지 않습니다. 휘도 기준 시간을 줄이려면 입면 각도 조정, 차양·루버, 세라믹 프릿·패턴 유리, 조경 등 반사 경로를 바꾸거나 가리는 대책을 함께 검토해야 합니다.</p>
+<h3 class="sub">다. 두 기준 비교</h3>
+<table><tr><th class="l">구분</th><th class="l">독일 LAI 지침</th><th class="l">국내 판례 휘도 기준</th></tr>
+<tr><td class="l">성격</td><td class="l">행정 지침(불편 여부 판단)</td><td class="l">민사 판례에 인용된 시각장애 밝기</td></tr>
+<tr><td class="l">지표</td><td class="l">반사광이 닿는 시간</td><td class="l">반사상의 휘도(cd/㎡)와 유입 시간</td></tr>
+<tr><td class="l">시간 기준</td><td class="l">1일 30분 · 연 30시간</td><td class="l">고정 한도 없음 (사례: 1일 1~3시간, 7~9개월)</td></tr>
+<tr><td class="l">제외 조건</td><td class="l">해와 10° 이내 반사</td><td class="l">없음</td></tr>
+<tr><td class="l">유리 반사율의 영향</td><td class="l">큼 (세기 하한을 두면 판정 시간이 줄어듦)</td><td class="l">작음 (저반사 유리도 기준을 크게 넘음)</td></tr>
+<tr><td class="l">본 검토 값</td><td class="l">세기 ${S.cfg.iLow} W/㎡ 이상 · 1일 ${S.cfg.dailyLim}분 · 연 ${S.cfg.annualLim}시간</td><td class="l">${lc().on ? `휘도 ${fmt(L.th, 0)} cd/㎡ 이상 · 1일 ${L.daily}분 · 연 ${L.annual}시간` : '적용 안 함'}</td></tr></table>
+<h3 class="sub">라. 반사 세기 등급</h3>
+<p>반사 세기는 맑은 날 직달일사에 입사각별 유리 반사율을 곱한 값(W/㎡)입니다. 본 검토는 ${S.cfg.iLow} W/㎡ 미만을 '약', ${S.cfg.iLow}~${S.cfg.iHigh} W/㎡를 '중', ${S.cfg.iHigh} W/㎡ 이상을 '강'으로 나눴습니다. 이 등급 구간은 법정 기준이 아니라 유리 간 비교를 위한 본 검토의 참고값입니다.</p>
+<p class="note">출처: LAI, Hinweise zur Messung, Beurteilung und Minderung von Lichtimmissionen (2012, 부록 2 2015 개정) · 대법원 2021. 3. 11. 선고 2013다59142 판결 · 대법원 2021. 6. 3. 선고 2016다33202, 33219 판결</p>`; };
   const limits = (n) => `<h2><span>${n}</span>분석 가정 및 한계</h2>
 <ul class="note"><li>${wxFactor() < 1 ? `반사광 경로는 맑은 날 기준으로 계산하고, 연간 판정에만 일조율 ${Math.round(wxFactor() * 100)}%를 곱한 기대치를 썼습니다. 하루 판정은 맑은 날 최대입니다.` : '모든 시간을 맑은 날로 가정한 최대 발생 조건입니다. 실제 발생 시간은 운량·미세먼지에 따라 줄어듭니다.'}</li>
 <li>유리 입면을 완전한 평면 거울로 보았습니다. 실제 복층유리의 미세한 휨(오일캔 현상)은 반사광을 퍼뜨려 도달 범위를 넓히고 강도를 낮춥니다.</li>
@@ -2095,12 +2359,12 @@ ${fg.map(f => { const fc = S.fac[f.i], g = glassById(fc.glass); return `<tr><td>
 <p style="margin:10px 0 2px"><b>그 밖의 저감 방안</b></p><ul>${mitigations().map(t => `<li>${esc(t)}</li>`).join('')}</ul>`; };
   let body;
   if (single) {
-    body = `<div class="rep">${head}${overview}${bldSection(scope, 3)}${mitSec(4, 'pb')}${limits(5)}${critSum(6)}</div>`;
+    body = `<div class="rep">${head}${overview}${bldSection(scope, 3)}${mitSec(4, 'pb')}${limits(5)}${critSum(6)}${critExplain(7)}</div>`;
   } else {
     const affIdx = recs.map((r, i) => i).filter(i => recs[i].hours > 0).sort((a, b) => recs[b].hours - recs[a].hours);
     const none = recs.map((r, i) => i).filter(i => !recs[i].hours).map(i => names[i]);
     // 순서: 요약·결과 → 저감 방안 → 가정·한계 → 판정 기준 요약 → 동별 상세 분석(맨 뒤)
-    const n0 = S.glasses.length > 1 ? 8 : 7, nD = n0 + 3;
+    const n0 = S.glasses.length > 1 ? 8 : 7, nD = n0 + 4;
     const detail = scope === 'all' ? `<h2 class="pb"><span>${nD}</span>동별 상세 분석</h2><p class="note">반사광이 닿는 ${affIdx.length}개동을 연간 현휘 시간이 긴 순서로 정리했습니다.${none.length ? ' 영향 없음: ' + esc(none.join(', ')) + '.' : ''}</p>` + affIdx.map((i, k) => bldSection(i, nD + '-' + (k + 1))).join('') : '';
     body = `<div class="rep">${head}${overview}
 <h2><span>3</span>배치 및 모델</h2>
@@ -2110,8 +2374,8 @@ ${img3d ? `<div><img src="${img3d}" alt="3D 모델"><p class="cap">3D 모델 · 
 <div class="kp"><div><b>${aff}/${names.length}</b><span>영향 받는 인접 건물</span></div><div><b class="${over ? 'bad' : 'ok'}">${over}</b><span>참고 기준 초과 건물</span></div><div><b>${fmt(w >= 0 ? recs[w].hours : 0, 1)}h</b><span>최대 연간 현휘 (${w >= 0 ? esc(names[w]) : '-'})</span></div><div><b>${dmax}분</b><span>최대 1일 지속</span></div></div>
 <ul>${noteLines().map(t => `<li>${esc(t)}</li>`).join('')}</ul>
 <h2><span>5</span>인접 건물별 영향</h2>
-<table><tr><th class="l">건물</th><th>층수</th><th>도달 연간</th><th>중 이상 연간</th><th>중 이상 1일 최대</th><th>발생 기간</th><th>시간대</th><th>원인 입면</th><th>최대 강도</th><th>판정</th></tr>
-${recs.map((R, i) => { const j = judge(R), top = Object.entries(R.fac).sort((a, b) => b[1] - a[1])[0]; return `<tr><td class="l">${esc(names[i])}</td><td>${RES.nbInfo[i].floors}층</td><td class="num">${R.hours ? fmt(R.hours, 1) + 'h' : '-'}</td><td class="num">${R.midH ? fmt(R.midH, 1) + 'h' : '-'}</td><td class="num">${R.maxDailyMid ? R.maxDailyMid + '분' : '-'}</td><td>${R.first != null ? mdStr(y, R.first) + '~' + mdStr(y, R.last) : '-'}</td><td class="num">${R.maxM >= 0 ? hhmm(R.minM) + '–' + hhmm(R.maxM + RES.P.minStep) : '-'}</td><td>${top ? dirLabel(RES.fac[+top[0]].az) : '-'}</td><td class="num">${R.maxI ? fmt(R.maxI, 0) : '-'}</td><td class="${j.k}">${j.t}</td></tr>`; }).join('')}</table>
+<table><tr><th class="l">건물</th><th>층수</th><th>도달 연간</th><th>중 이상 연간</th><th>중 이상 1일 최대</th><th>발생 기간</th><th>시간대</th><th>원인 입면</th><th>최대 강도</th><th>판정</th>${lc().on ? '<th>휘도 판정 (국내 판례)</th>' : ''}</tr>
+${recs.map((R, i) => { const j = judge(R), jl = judgeLum(R), top = Object.entries(R.fac).sort((a, b) => b[1] - a[1])[0]; return `<tr><td class="l">${esc(names[i])}</td><td>${RES.nbInfo[i].floors}층</td><td class="num">${R.hours ? fmt(R.hours, 1) + 'h' : '-'}</td><td class="num">${R.midH ? fmt(R.midH, 1) + 'h' : '-'}</td><td class="num">${R.maxDailyMid ? R.maxDailyMid + '분' : '-'}</td><td>${R.first != null ? mdStr(y, R.first) + '~' + mdStr(y, R.last) : '-'}</td><td class="num">${R.maxM >= 0 ? hhmm(R.minM) + '–' + hhmm(R.maxM + RES.P.minStep) : '-'}</td><td>${top ? dirLabel(RES.fac[+top[0]].az) : '-'}</td><td class="num">${R.maxI ? fmt(R.maxI, 0) : '-'}</td><td class="${j.k}">${j.t}</td>${lc().on ? `<td class="${jl.k}">${jl.t}</td>` : ''}</tr>`; }).join('')}</table>
 <h2><span>6</span>연중 현휘 발생 분포</h2>
 <img src="${heatImg}" alt="연중 발생 분포"><p class="cap">가로: 월, 세로: 시각(KST). 노랑 약(&lt;${P.iLow}), 주황 중(${P.iLow}–${P.iHigh}), 빨강 강(≥${P.iHigh} W/㎡). 회색 곡선은 일출·일몰.</p>
 ${S.glasses.length > 1 ? `<h2><span>7</span>유리 반사율별 비교</h2>
@@ -2121,11 +2385,12 @@ ${RES.cmp.slice().sort((a, b) => a.g.R - b.g.R).map(c => `<tr${c.g.id === S.defG
 ${mitSec(n0, 'pb')}
 ${limits(n0 + 1)}
 ${critSum(n0 + 2, false)}
+${critExplain(n0 + 3)}
 ${detail}
 </div>`;
   }
   if (!standalone) { $('repView').innerHTML = `<style>${REP_CSS}</style>` + body; return body; }
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc($('projName').value)} 현휘 검토서</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600&family=IBM+Plex+Mono&display=swap"><style>body{margin:0;padding:32px 20px;background:#fff}${REP_CSS}@page{size:A4;margin:16mm}</style></head><body>${body}</body></html>`;
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc($('projName').value)} 현휘 검토서</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600&family=IBM+Plex+Mono&display=swap"><style>body{margin:0;padding:32px 20px;background:#fff}${REP_CSS}@page{size:A4 ${repOrient()};margin:12mm}@media print{body{padding:0}}${repOrient() === 'landscape' ? '.rep{max-width:none}' : ''}</style></head><body>${body}</body></html>`;
 }
 
 /* ===== 시작 ===== */
@@ -2229,6 +2494,10 @@ function bindJudgeCfg() {
   $('cfgCellW').onchange = e => { const v = parseFloat(e.target.value); if (isFinite(v) && v >= 1) { S.cfg.cellW = v; re(); } else e.target.value = cellW(); };
   $('cfgSunPct').onchange = e => { const v = parseFloat(e.target.value); if (isFinite(v) && v > 0) { S.cfg.sunPct = Math.min(100, v); re(); } };
   $('cfgUseWx').onchange = e => { S.cfg.useWx = e.target.checked; re(); };
+  const L = lc(); $('cfgLumOn').checked = L.on; $('cfgLumTh').value = L.th; $('cfgLumDaily').value = L.daily; $('cfgLumAnnual').value = L.annual; $('cfgLumSpread').value = L.spread;
+  $('cfgLumOn').onchange = e => { S.cfg.lumOn = e.target.checked; re(); };
+  const num = (id, key, min, def) => { $(id).onchange = e => { const v = parseFloat(e.target.value); if (isFinite(v) && v >= min) { S.cfg[key] = v; re(); } else e.target.value = lc()[def]; }; };
+  num('cfgLumTh', 'lumTh', 1, 'th'); num('cfgLumDaily', 'lumDaily', 1, 'daily'); num('cfgLumAnnual', 'lumAnnual', 0.1, 'annual'); num('cfgLumSpread', 'lumSpread', 0, 'spread');
 }
 function applySingle() {
   const one = S.single || S.glasses.length <= 1;
