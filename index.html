@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{box-sizing:border-box}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>
+/* 현휘 분석 화면: 준비가 끝날 때까지 아무것도 그리지 않음 */
+html[data-mode="glare"]{background:#e9eef0}
+@media (prefers-color-scheme:dark){html[data-mode="glare"]{background:#0e1418}}
+html[data-mode="glare"]:not(.gl-ready) body{visibility:hidden}
+</style>
+<script>setTimeout(function(){document.documentElement.classList.add('gl-ready')},6000);</script>
 </head>
 <body>
 <title>건축 현휘 분석</title>
@@ -4214,7 +4221,8 @@ html[data-mode="glare"] .t3 .heatleg, html[data-mode="glare"] .t3 .heatinfo { to
     glareProject,
     setOrient(a) { const el = $('orient'); el.value = Math.round(((a % 360) + 360) % 360 / 5) * 5 % 360; el.oninput({ target: el }); },
   };
-  resize(); setType('off'); setView('split');
+  // 기본 건물: 실제 건물 (주소를 찾으면 그 자리의 실제 건물 윤곽·층수로 세움). 브이월드를 못 쓰는 곳에선 업무시설
+  resize(); setType(onSite ? 'real' : 'off'); setView('split');
   requestAnimationFrame(loop);
 })();
 
@@ -4489,6 +4497,8 @@ html[data-mode="glare"] .t3 .pcol { display: flex; flex-direction: column; gap: 
   $('t3srcOpen').textContent = '발생 부위 입면도';
   // 화면 주소가 #photo여도 3D로
   window.addEventListener('hashchange', () => { if (location.hash !== '#model3d') window.goTab('model3d'); });
+  // 준비가 끝난 뒤에야 화면을 보여 줌 (유리 색상 비교 화면이 잠깐 비치지 않게)
+  requestAnimationFrame(() => document.documentElement.classList.add('gl-ready'));
 })();
 </script>
 

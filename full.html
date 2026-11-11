@@ -684,12 +684,17 @@ html[data-mode="glare"] .t3 .heatleg, html[data-mode="glare"] .t3 .heatinfo { to
       <p class="note">유리에 비친 햇빛이 인접 건물의 어느 면, 몇 층에, 1년 중 언제 닿는지 계산합니다. 실제 주변을 켜면 실제 이웃 건물로 분석합니다.</p>
       <div class="namebox"><span>분석 유리</span><select id="t3glGlass" aria-label="분석할 유리"></select></div>
       <div class="namebox"><span>분석 반경</span>
-        <select id="t3glRad" aria-label="분석 반경">
+        <div style="display:flex;gap:6px;align-items:center;min-width:0">
+        <select id="t3glRad" aria-label="분석 반경" style="flex:1 1 auto;min-width:0">
           <option value="50" selected>건물에서 50m 이내</option>
           <option value="100">100m 이내</option>
           <option value="200">200m 이내</option>
           <option value="0">불러온 주변 전체</option>
+          <option value="custom">직접 입력</option>
         </select>
+        <input type="number" id="t3glRadIn" min="1" max="5000" step="1" value="150" aria-label="분석 반경 직접 입력 (m)" style="display:none;width:90px;flex:none;font:inherit;font-size:13px;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:5px 7px" title="건물에서 몇 m 이내까지 분석할지 입력">
+        <span id="t3glRadUnit" style="display:none;flex:none">m</span>
+        </div>
       </div>
       <div class="namebox"><span>연간 판정</span>
         <select id="t3glWx" aria-label="연간 판정 기준">
@@ -3354,7 +3359,11 @@ html[data-mode="glare"] .t3 .heatleg, html[data-mode="glare"] .t3 .heatinfo { to
     return m;
   }
   function glFoot() { return footprintEN().map(([e, n]) => [e, -n]); } // x, z
-  function glRadius() { return +$('glRad').value; }
+  function glRadius() {
+    const v = $('glRad').value;
+    if (v === 'custom') { const n = Math.round(+$('glRadIn').value); return n > 0 ? n : 50; }
+    return +v;
+  }
   function withinRadius(list) {
     const R = glRadius(); if (!R) return list;
     const F = glFoot();
@@ -3928,7 +3937,17 @@ html[data-mode="glare"] .t3 .heatleg, html[data-mode="glare"] .t3 .heatinfo { to
   $('glDay').onclick = () => { glPeriod = 'day'; $('glYear').setAttribute('aria-pressed', 'false'); $('glDay').setAttribute('aria-pressed', 'true'); };
   $('glLive').onchange = e => { glLiveOn = e.target.checked; $('glLiveMsg').hidden = !glLiveOn; glLiveDraw(); };
   $('glGlass').onchange = () => { if (glLiveOn) glLiveDraw(); if (glRows.length) glRender(glLastYear, glLastSecs); };
-  $('glRad').onchange = () => { glInvalidate('분석 반경을 바꿨습니다. 다시 분석해 주세요.'); };
+  $('glRad').onchange = () => {
+    const cu = $('glRad').value === 'custom';
+    $('glRadIn').style.display = cu ? '' : 'none'; $('glRadUnit').style.display = cu ? '' : 'none';
+    if (cu) $('glRadIn').focus();
+    glInvalidate('분석 반경을 바꿨습니다. 다시 분석해 주세요.');
+  };
+  $('glRadIn').onchange = () => {
+    const n = Math.round(+$('glRadIn').value);
+    $('glRadIn').value = n > 0 ? Math.min(n, 5000) : 50;
+    glInvalidate('분석 반경을 ' + $('glRadIn').value + 'm로 바꿨습니다. 다시 분석해 주세요.');
+  };
   $('glWx').onchange = () => { if (glRows.length) glRender(glLastYear, glLastSecs); };
   $('glHeat').onchange = () => { if (glRows.length) glDrawCells(glR0(), glLastYear); };
   document.addEventListener('glass-pick', () => glFillGlass());
@@ -4195,7 +4214,8 @@ html[data-mode="glare"] .t3 .heatleg, html[data-mode="glare"] .t3 .heatinfo { to
     glareProject,
     setOrient(a) { const el = $('orient'); el.value = Math.round(((a % 360) + 360) % 360 / 5) * 5 % 360; el.oninput({ target: el }); },
   };
-  resize(); setType('off'); setView('split');
+  // 기본 건물: 실제 건물 (주소를 찾으면 그 자리의 실제 건물 윤곽·층수로 세움). 브이월드를 못 쓰는 곳에선 업무시설
+  resize(); setType(onSite ? 'real' : 'off'); setView('split');
   requestAnimationFrame(loop);
 })();
 
@@ -4470,6 +4490,8 @@ html[data-mode="glare"] .t3 .pcol { display: flex; flex-direction: column; gap: 
   $('t3srcOpen').textContent = '발생 부위 입면도';
   // 화면 주소가 #photo여도 3D로
   window.addEventListener('hashchange', () => { if (location.hash !== '#model3d') window.goTab('model3d'); });
+  // 준비가 끝난 뒤에야 화면을 보여 줌 (유리 색상 비교 화면이 잠깐 비치지 않게)
+  requestAnimationFrame(() => document.documentElement.classList.add('gl-ready'));
 })();
 </script>
 
